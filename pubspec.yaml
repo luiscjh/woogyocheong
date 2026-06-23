@@ -1,0 +1,48 @@
+name: church_youth_app
+description: 교회 청년부 관리 앱 - 출석, 회비, 심방신청
+
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  firebase_storage: ^12.3.3
+
+  # State management
+  provider: ^6.1.2
+
+  # UI
+  carousel_slider: ^5.0.0
+  cached_network_image: ^3.4.1
+  flutter_slidable: ^3.1.1
+
+  # File handling
+  image_picker: ^1.1.2
+  file_picker: ^8.1.2
+  excel: ^4.0.6
+
+  # Auth
+  google_sign_in: ^6.2.1
+
+  # Utils
+  intl: ^0.19.0
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
