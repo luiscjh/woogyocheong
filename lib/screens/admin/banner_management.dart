@@ -1,10 +1,12 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
 import '../../models/banner_model.dart';
 import '../../utils/constants.dart';
+import '../../widgets/app_image.dart';
 
 class BannerManagementScreen extends StatefulWidget {
   const BannerManagementScreen({super.key});
@@ -146,6 +148,17 @@ class _BannerTile extends StatelessWidget {
     required this.onToggle,
   });
 
+  String _scheduleLabel(BannerModel b) {
+    final fmt = DateFormat('yy.MM.dd');
+    if (b.startDate != null && b.endDate != null) {
+      return '${fmt.format(b.startDate!)} ~ ${fmt.format(b.endDate!)}';
+    } else if (b.startDate != null) {
+      return '${fmt.format(b.startDate!)}부터';
+    } else {
+      return '${fmt.format(b.endDate!)}까지';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -153,21 +166,41 @@ class _BannerTile extends StatelessWidget {
       child: ListTile(
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: CachedNetworkImage(
-            imageUrl: banner.imageUrl,
+          child: SizedBox(
             width: 60,
             height: 60,
-            fit: BoxFit.cover,
-            errorWidget: (_, __, ___) => Container(
-              width: 60,
-              height: 60,
-              color: Colors.grey[200],
-              child: const Icon(Icons.image),
-            ),
+            child: AppImage(imageUrl: banner.imageUrl, fit: BoxFit.cover),
           ),
         ),
         title: Text(banner.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(banner.description ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (banner.description != null && banner.description!.isNotEmpty)
+              Text(banner.description!, maxLines: 1, overflow: TextOverflow.ellipsis),
+            if (banner.startDate != null || banner.endDate != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.schedule,
+                      size: 12,
+                      color: banner.isInSchedule ? AppColors.primary : Colors.grey,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      _scheduleLabel(banner),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: banner.isInSchedule ? AppColors.primary : Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -210,8 +243,11 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleCtrl;
   late final TextEditingController _descCtrl;
-  File? _imageFile;
+  XFile? _imageFile;
+  Uint8List? _imageBytes;
   bool _isLoading = false;
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   bool get isEditing => widget.banner != null;
 
@@ -220,6 +256,8 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
     super.initState();
     _titleCtrl = TextEditingController(text: widget.banner?.title);
     _descCtrl = TextEditingController(text: widget.banner?.description);
+    _startDate = widget.banner?.startDate;
+    _endDate = widget.banner?.endDate;
   }
 
   @override
@@ -231,7 +269,13 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
 
   Future<void> _pickImage() async {
     final file = await widget.storage.pickImageFromGallery();
-    if (file != null) setState(() => _imageFile = file);
+    if (file != null) {
+      final bytes = await file.readAsBytes();
+      setState(() {
+        _imageFile = file;
+        _imageBytes = bytes;
+      });
+    }
   }
 
   Future<void> _save() async {
@@ -258,6 +302,8 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
           order: widget.banner!.order,
           isActive: widget.banner!.isActive,
           createdAt: widget.banner!.createdAt,
+          startDate: _startDate,
+          endDate: _endDate,
         ));
       } else {
         await widget.firestore.addBanner(BannerModel(
@@ -268,6 +314,8 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
           order: widget.nextOrder,
           isActive: true,
           createdAt: DateTime.now(),
+          startDate: _startDate,
+          endDate: _endDate,
         ));
       }
       if (mounted) Navigator.pop(context);
@@ -296,15 +344,15 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.grey[300]!),
                   ),
-                  child: _imageFile != null
+                  child: _imageBytes != null
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.file(_imageFile!, fit: BoxFit.cover),
+                          child: Image.memory(_imageBytes!, fit: BoxFit.cover),
                         )
                       : widget.banner?.imageUrl != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: CachedNetworkImage(
+                              child: AppImage(
                                 imageUrl: widget.banner!.imageUrl,
                                 fit: BoxFit.cover,
                               ),
@@ -330,6 +378,46 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
                 decoration: const InputDecoration(labelText: '설명 (선택사항)'),
                 maxLines: 2,
               ),
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 4),
+              const Row(
+                children: [
+                  Icon(Icons.schedule, size: 16, color: Colors.grey),
+                  SizedBox(width: 6),
+                  Text('광고 기간 (선택사항)', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _DatePickerField(
+                    label: '시작일',
+                    value: _startDate,
+                    lastDate: _endDate,
+                    onChanged: (d) => setState(() => _startDate = d),
+                  )),
+                  const SizedBox(width: 8),
+                  const Text('~', style: TextStyle(color: Colors.grey)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _DatePickerField(
+                    label: '종료일',
+                    value: _endDate,
+                    firstDate: _startDate,
+                    onChanged: (d) => setState(() => _endDate = d),
+                  )),
+                ],
+              ),
+              if (_startDate != null || _endDate != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: TextButton.icon(
+                    onPressed: () => setState(() { _startDate = null; _endDate = null; }),
+                    icon: const Icon(Icons.clear, size: 14),
+                    label: const Text('기간 초기화', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(foregroundColor: Colors.grey),
+                  ),
+                ),
             ],
           ),
         ),
@@ -343,6 +431,67 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
               : Text(isEditing ? '저장' : '추가'),
         ),
       ],
+    );
+  }
+}
+
+class _DatePickerField extends StatelessWidget {
+  final String label;
+  final DateTime? value;
+  final DateTime? firstDate;
+  final DateTime? lastDate;
+  final ValueChanged<DateTime?> onChanged;
+
+  const _DatePickerField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.firstDate,
+    this.lastDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('yy.MM.dd');
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: value ?? DateTime.now(),
+          firstDate: firstDate ?? DateTime(2020),
+          lastDate: lastDate ?? DateTime(2100),
+          locale: const Locale('ko'),
+        );
+        onChanged(picked);
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[400]!),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                value != null ? fmt.format(value!) : label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: value != null ? Colors.black87 : Colors.grey,
+                ),
+              ),
+            ),
+            if (value != null)
+              GestureDetector(
+                onTap: () => onChanged(null),
+                child: const Icon(Icons.close, size: 14, color: Colors.grey),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/demo_data.dart';
 import '../services/firestore_service.dart' show demoMode;
+import '../utils/constants.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated }
 
@@ -16,7 +17,22 @@ class AuthProvider extends ChangeNotifier {
   AuthStatus get status => _status;
   UserModel? get currentUser => _currentUser;
   String? get error => _error;
+
   bool get isAdmin => _currentUser?.isAdmin ?? false;
+  bool get isExecutive => _currentUser?.isExecutive ?? false;
+  bool get isMidLeader => _currentUser?.isMidLeader ?? false;
+  bool get isSmallLeader => _currentUser?.isSmallLeader ?? false;
+
+  // 출석/회비 수정 권한: 소팀장 이상
+  bool get canEditAttendance => isSmallLeader;
+  // 출석/회비 팀 조회 권한: 중팀장 이상
+  bool get canViewTeam => isMidLeader;
+  // 심방 확정 권한: 임원팀 + visit_confirm 권한 OR 관리자
+  bool get canConfirmVisit => _currentUser?.hasPermission(AppPermission.visitConfirm) ?? false;
+  // 배너 관리 권한: 임원팀 이상
+  bool get canManageBanners => isExecutive;
+  // 회원 관리 권한: 소팀장 이상
+  bool get canManageMembers => isSmallLeader;
 
   AuthProvider() {
     if (demoMode) {
@@ -97,6 +113,13 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  // 본인 역할 양도 등, 본인 데이터가 외부에서 갱신된 경우 세션에 즉시 반영
+  void setCurrentUser(UserModel user) {
+    _currentUser = user;
+    if (demoMode) DemoData.instance.currentUser = user;
+    notifyListeners();
   }
 
   Future<void> signOut() async {

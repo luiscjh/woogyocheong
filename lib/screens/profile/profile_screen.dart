@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/firestore_service.dart';
+import '../../models/user_model.dart';
 import '../../utils/constants.dart';
+
+// 본인 역할을 스스로 양도할 수 있는 역할 (딱 해당 역할까지만 양도 가능)
+const _transferableRoles = [UserRole.smallLeader, UserRole.midLeader, UserRole.executive];
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -36,7 +41,7 @@ class ProfileScreen extends StatelessWidget {
               user.name,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
-            if (user.isAdmin)
+            if (user.role != UserRole.member)
               Container(
                 margin: const EdgeInsets.only(top: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -44,7 +49,7 @@ class ProfileScreen extends StatelessWidget {
                   color: AppColors.accent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text('관리자', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600)),
+                child: Text(UserRole.label(user.role), style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600)),
               ),
             const SizedBox(height: 32),
             _InfoCard(
@@ -59,6 +64,17 @@ class ProfileScreen extends StatelessWidget {
                 ),
               ],
             ),
+            if (_transferableRoles.contains(user.role)) ...[
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showTransferDialog(context, user),
+                  icon: const Icon(Icons.swap_horiz),
+                  label: Text('${UserRole.label(user.role)} 역할 양도'),
+                ),
+              ),
+            ],
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
@@ -75,6 +91,87 @@ class ProfileScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  List<UserModel> _candidatesFor(UserModel me, List<UserModel> all) {
+    final others = all.where((m) => m.uid != me.uid && m.role == UserRole.member);
+    if (me.role == UserRole.smallLeader) {
+      return others.where((m) => m.department == me.department).toList();
+    } else if (me.role == UserRole.midLeader) {
+      return others.where((m) => m.midTeam == me.midTeam).toList();
+    } else if (me.role == UserRole.executive) {
+      return others.toList();
+    }
+    return const [];
+  }
+
+  void _showTransferDialog(BuildContext context, UserModel me) {
+    final service = FirestoreService();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('${UserRole.label(me.role)} 역할 양도'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: StreamBuilder<List<UserModel>>(
+            stream: service.streamAllMembers(),
+            builder: (ctx, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const SizedBox(height: 80, child: Center(child: CircularProgressIndicator()));
+              }
+              final candidates = _candidatesFor(me, snap.data ?? []);
+              if (candidates.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text('양도할 수 있는 팀원이 없습니다.'),
+                );
+              }
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: candidates
+                      .map((c) => ListTile(
+                            leading: CircleAvatar(child: Text(c.name.isNotEmpty ? c.name[0] : '?')),
+                            title: Text(c.name),
+                            subtitle: Text(c.email),
+                            onTap: () => _confirmTransfer(context, service, me, c),
+                          ))
+                      .toList(),
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmTransfer(BuildContext context, FirestoreService service, UserModel me, UserModel target) async {
+    final roleLabel = UserRole.label(me.role);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('역할 양도 확인'),
+        content: Text('${target.name}님에게 $roleLabel 역할을 양도하시겠습니까?\n양도 후 회원님은 팀원으로 전환됩니다.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('양도')),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+
+    await service.transferRole(me, target);
+    if (!context.mounted) return;
+
+    context.read<AuthProvider>().setCurrentUser(me.copyWith(role: UserRole.member, permissions: const []));
+    Navigator.pop(context); // 후보 목록 다이얼로그 닫기
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${target.name}님에게 $roleLabel 역할을 양도했습니다.'), backgroundColor: AppColors.success),
     );
   }
 

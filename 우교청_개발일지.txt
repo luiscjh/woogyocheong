@@ -1,0 +1,193 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+우교청 (우리 교회 청년부) 앱 개발일지
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[프로젝트 개요]
+  앱 이름  : 우교청 (우리 교회 청년부)
+  기술 스택 : Flutter + Firebase (현재 demoMode로 인메모리 실행)
+  저장소   : https://github.com/luiscjh/woogyocheong
+  경로     : /Users/choejaehyeon/church_youth_app
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[1차 작업] 2026-06-23 ~ 2026-06-24
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ Flutter Web Firebase JS interop 오류 수정
+  - auth_service.dart, firestore_service.dart의 final 필드를
+    getter로 변경하여 웹 환경 초기화 순서 문제 해결
+
+■ 앱 이름 변경
+  - '청년부 관리' → '우교청'
+  - 부제목: '우리 교회 청년부' 추가
+
+■ Google 로그인 추가
+  - google_sign_in: ^6.2.1 패키지 적용
+  - demoMode에서는 데모 유저로 자동 로그인 처리
+
+■ GitHub 초기 셋업
+  - git 초기화 + SSH 키 설정
+  - GitHub push 완료 (초기 커밋: e6a3725d)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2차 작업] 2026-07-05
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 역할 계층 시스템 도입 (lib/utils/constants.dart)
+  기존: admin / member 2단계
+  변경: member → small_leader → mid_leader → executive → admin 5단계
+
+  추가된 상수:
+    - UserRole.smallLeader  : 소팀장
+    - UserRole.midLeader    : 중팀장
+    - UserRole.executive    : 임원팀
+    - UserRole.labels       : 역할 한글 레이블 맵
+    - AppPermission.visitConfirm : 심방 확정 권한 (개별 부여 가능)
+    - AppTeams.midTeams     : ['A', 'B', 'C', 'D']
+    - AppTeams.smallTeams   : 'A-1' ~ 'D-4' (16개 소팀)
+    - AppTeams.smallTeamsOf : 특정 중팀의 소팀 목록 반환 헬퍼
+
+■ UserModel 확장 (lib/models/user_model.dart)
+  - permissions 필드 추가 (관리자가 개인에게 부여하는 추가 권한 목록)
+  - 역할 계층 getter 추가:
+      isAdmin, isExecutive, isMidLeader, isSmallLeader (상위 역할 포함)
+  - midTeam getter: department('A-1') → 중팀('A') 자동 추출
+  - hasPermission(perm): 관리자이거나 permissions에 포함 시 true
+
+■ AuthProvider 권한 getter 추가 (lib/providers/auth_provider.dart)
+  - isExecutive, isMidLeader, isSmallLeader
+  - canEditAttendance  : 소팀장 이상 → 출석/회비 수정 가능
+  - canViewTeam        : 중팀장 이상 → 팀 전체 조회 가능
+  - canConfirmVisit    : visit_confirm 권한 보유 시 심방 확정 가능
+  - canManageBanners   : 임원팀 이상 → 배너 관리 가능
+  - canManageMembers   : 소팀장 이상 → 회원 관리 가능
+
+■ 회원 관리 화면 개선 (lib/screens/admin/member_management.dart)
+  - 역할별 조회 범위 제한:
+      소팀장 → 본인 소팀 회원만 표시
+      중팀장 → 본인 중팀 회원만 표시
+      임원팀 이상 → 전체 회원 표시
+  - 엑셀 가져오기: dart:io(모바일 전용) → file.bytes(웹 호환) 방식으로 변경
+  - CSV 파일 지원 추가 (.xlsx, .xls, .csv)
+  - 파일 형식 안내 다이얼로그 추가 (열 순서, 예시 등)
+
+■ 출석 관리 화면 개선 (lib/screens/attendance/attendance_admin_screen.dart)
+  - canEdit, smallTeamFilter, midTeamFilter 파라미터 추가
+  - 역할에 따라 표시 범위 및 수정 권한 분리:
+      소팀장 → 본인 소팀만, 수정 가능
+      중팀장 → 본인 중팀만, 읽기 전용
+      임원팀 이상 → 전체, 수정 가능
+
+■ 회비 관리 화면 개선 (lib/screens/fee/fee_screen.dart)
+  - 역할별 뷰 분기 로직 추가:
+      임원팀 이상 → 전체 목록, 수정 가능
+      중팀장 → 본인 중팀만, 읽기 전용
+      소팀장 → 본인 소팀만, 수정 가능
+      팀원 → 본인 납부 현황만 조회
+  - _AdminFeeView에 canEdit, smallTeamFilter, midTeamFilter 파라미터 추가
+
+■ 심방 관리 화면 개선 (lib/screens/visit/visit_screen.dart)
+  - 임원팀: visit_confirm 권한 보유 시에만 심방 확정 버튼 표시
+  - canConfirm 파라미터로 확정/완료/취소 버튼 표시 여부 제어
+
+■ 스토리지 서비스 웹 호환 (lib/services/storage_service.dart)
+  - dart:io의 File → XFile + bytes 방식으로 변경 (웹 지원)
+  - demoMode 시 Firebase Storage 호출 없이 플레이스홀더 URL 반환
+  - pickImageFromCamera 제거 (웹 미지원)
+
+■ 웹 실행 확인
+  - flutter run -d chrome --web-port=3000 으로 Chrome에서 정상 실행 확인
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[3차 작업] 2026-07-12
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 기존 구현 확인 (2차 작업분, 브라우저 실행으로 검증)
+  - 회원별 권한(permissions) 부여 UI: 회원 수정 다이얼로그에서 역할을
+    '임원팀'으로 두면 '심방 확정 권한' 체크박스가 뜨는 형태로 이미 구현되어
+    있었음. 로그인 → 회원 관리 → 수정 다이얼로그까지 실제로 조작해 정상
+    동작 확인 (체크 해제/재저장 시 반영됨)
+  - 배너 광고 기간 미설정 시 상시 노출: BannerModel.isInSchedule이
+    시작일/종료일 둘 다 null이면 항상 true를 반환하도록 이미 구현되어
+    있었음 (추가 작업 없음)
+
+■ 역할 양도(인계) 기능 추가
+  - 배경: 소팀장/중팀장/임원팀이 교체될 때마다 관리자가 매번 권한을
+    새로 부여해야 하는 비효율 해소
+  - lib/services/firestore_service.dart: transferRole(outgoing, incoming)
+    추가 — 후임자에게 역할+보유 추가권한(예: 심방확정권한)을 넘기고,
+    기존 보유자는 role='member', permissions=[] 로 전환
+  - lib/providers/auth_provider.dart: setCurrentUser() 추가 — 본인이
+    스스로 역할을 양도한 직후, 재로그인 없이 세션에 즉시 반영
+  - lib/screens/profile/profile_screen.dart: '내 정보' 화면에 역할 배지
+    표시 추가 + '{역할} 역할 양도' 버튼 추가
+      · 소팀장 → 같은 소팀의 '팀원'에게만 양도 가능
+      · 중팀장 → 같은 중팀의 '팀원'에게만 양도 가능
+      · 임원팀 → 전체 '팀원' 중 아무에게나 양도 가능
+      · 대상은 항상 role == member인 사람만 후보로 노출 (다른 리더 역할을
+        실수로 덮어쓰지 않도록)
+  - 브라우저 자동화로 소팀장(정소팀) → 팀원(이청년) 양도 전체 플로우 검증
+    완료 (후보 목록 필터링, 확인 다이얼로그, 양도 후 즉시 배지/버튼 소멸,
+    관리자 화면에서 실제 역할 변경 반영까지 확인)
+
+■ 출석/회비 소팀장 수정 권한 재확인 + 통계 버그 수정
+  - 소팀장이 본인 소팀 팀원의 출석/회비를 수정하는 기능은 2차 작업에서
+    이미 구현되어 있었음 (canEdit: true, smallTeamFilter: 본인 department)
+  - 검증 중 발견한 버그: 출석/회비 관리 화면 상단 통계('전체/출석/결석',
+    '전체/납부/미납')가 팀 필터링과 무관하게 교회 전체 데이터 기준으로
+    계산되고 있어 소팀장 화면에서 '전체 5명, 출석 10명, 200%' 같은 잘못된
+    숫자가 표시되던 문제 발견
+  - lib/screens/attendance/attendance_admin_screen.dart,
+    lib/screens/fee/fee_screen.dart: 통계 계산을 필터링된 팀원 목록
+    기준으로 수정
+
+■ 출석체크 일요일 제한 + 출석 명단 다운로드 (임원팀/관리자 전용)
+  - 출석 마킹(본인 체크인 및 소팀장 이상의 수정)은 오늘이 실제 일요일일
+    때만 가능하도록 제한. 일요일이 아니면 일반 회원 화면엔 안내 문구
+    표시, 관리 화면에선 수정 메뉴 숨김. 과거 기록 조회는 요일과 무관하게
+    항상 가능
+  - lib/screens/attendance/attendance_screen.dart: _isTodaySunday 게이트
+    추가, _MemberAttendanceView에 canEdit 파라미터 추가
+  - 출석 명단 CSV 다운로드 기능 추가 (해당 일자 이름/부서/출결 내보내기)
+      · lib/utils/csv_download.dart + csv_download/download_web.dart,
+        download_stub.dart — dart:html 조건부 import로 새 패키지 추가 없이
+        웹 전용 다운로드 구현 (UTF-8 BOM 포함, 엑셀 한글 깨짐 방지)
+      · lib/screens/attendance/attendance_admin_screen.dart: 통계 바에
+        다운로드 아이콘 추가, canDownload 파라미터로 노출 여부 제어
+      · lib/screens/attendance/attendance_screen.dart: canDownload는
+        임원팀(관리자 포함) 분기에서만 true로 전달 → 소팀장/중팀장 화면에는
+        다운로드 버튼이 보이지 않음
+  - 브라우저 자동화로 검증: 임원팀 계정에서 다운로드 클릭 → 파일명
+    '출석부_20260712.csv', 내용(이름,부서,상태) 및 한글 인코딩 정상 확인.
+    소팀장 계정에는 다운로드 버튼 미노출 확인
+
+■ 웹 실행 확인
+  - 매 변경 후 flutter analyze 통과 (이슈 0건) 확인
+  - Playwright 기반 headless/CDP 자동화로 별도 인스턴스에서 로그인 →
+    화면 조작 → 결과 스크린샷/다운로드 파일까지 실제 동작 검증
+    (실 데이터에는 영향 없는 격리된 테스트 인스턴스 사용)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[현재 상태]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  demoMode = true (Firebase 없이 인메모리 데이터로 실행 중)
+  브랜치: main (커밋되지 않은 변경사항 다수 존재 - 1차+2차+3차 작업 전부
+  아직 미커밋)
+
+  웹 실행 명령:
+    export PATH="$PATH:/Users/choejaehyeon/development/flutter/bin"
+    flutter run -d chrome --web-port=3000
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[남은 작업 (TODO)]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [ ] 변경사항 git commit 및 GitHub push (1~3차 작업 전부 미커밋 상태)
+  [ ] Firebase 실제 프로젝트 연결
+        - firebase_options.dart 실제 키로 교체
+        - demoMode = false 로 변경
+  [ ] Firebase Console에서 Google 로그인 활성화
+  [ ] 웹 배포 (Firebase Hosting 또는 Netlify)
+  [ ] 앱 아이콘 및 스플래시 화면 커스터마이징
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

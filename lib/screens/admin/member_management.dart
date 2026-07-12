@@ -1,10 +1,12 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart';
 import 'package:uuid/uuid.dart';
+import 'package:provider/provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../utils/constants.dart';
 
 class MemberManagementScreen extends StatefulWidget {
@@ -19,14 +21,22 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+    final currentUser = authProvider.currentUser!;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('회원 관리'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: '파일 형식 안내',
+            onPressed: _showFormatGuide,
+          ),
+          IconButton(
             icon: const Icon(Icons.upload_file),
-            tooltip: '엑셀 가져오기',
-            onPressed: _importExcel,
+            tooltip: '엑셀/CSV 가져오기',
+            onPressed: _importFile,
           ),
         ],
       ),
@@ -36,7 +46,15 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          final members = snap.data ?? [];
+          var members = snap.data ?? [];
+          // 역할에 따라 조회 범위 제한
+          if (!authProvider.isExecutive) {
+            if (authProvider.isMidLeader) {
+              members = members.where((m) => m.midTeam == currentUser.midTeam).toList();
+            } else if (authProvider.isSmallLeader) {
+              members = members.where((m) => m.department == currentUser.department).toList();
+            }
+          }
           if (members.isEmpty) {
             return Center(
               child: Column(
@@ -75,59 +93,76 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
     );
   }
 
-  Future<void> _importExcel() async {
+  void _showFormatGuide() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('파일 형식 안내'),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('지원 형식: .xlsx, .xls, .csv', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 12),
+              Text('열 순서 (첫 번째 행은 헤더):'),
+              SizedBox(height: 6),
+              Text('A열: 이름 (필수)'),
+              Text('B열: 팀/부서 (필수)'),
+              Text('C열: 전화번호'),
+              Text('D열: 이메일'),
+              SizedBox(height: 12),
+              Text('예시:', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text('이름  | 팀    | 전화번호       | 이메일'),
+              Text('홍길동 | 1팀   | 010-1234-5678 | hong@gmail.com'),
+              Text('김철수 | 2팀   | 010-9876-5432 |'),
+              SizedBox(height: 12),
+              Text('※ CSV 파일은 UTF-8 인코딩으로 저장해 주세요.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('확인')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['xlsx', 'xls'],
+      allowedExtensions: ['xlsx', 'xls', 'csv'],
+      withData: true, // 웹 호환: bytes로 직접 읽기
     );
-    if (result == null || result.files.single.path == null) return;
+    if (result == null) return;
+
+    final file = result.files.single;
+    final bytes = file.bytes;
+    if (bytes == null) return;
 
     try {
-      final bytes = File(result.files.single.path!).readAsBytesSync();
-      final excel = Excel.decodeBytes(bytes);
-      final sheet = excel.tables.values.first;
-
-      final members = <UserModel>[];
-      // 첫 행은 헤더로 간주하고 2번째 행부터 읽기
-      // 컬럼 순서: 이름, 이메일, 전화번호, 부서
-      for (var i = 1; i < sheet.rows.length; i++) {
-        final row = sheet.rows[i];
-        if (row.isEmpty || row[0]?.value == null) continue;
-
-        final name = row[0]?.value?.toString() ?? '';
-        final email = row[1]?.value?.toString() ?? '';
-        final phone = row[2]?.value?.toString() ?? '';
-        final dept = row[3]?.value?.toString() ?? '';
-
-        if (name.isEmpty || email.isEmpty) continue;
-
-        members.add(UserModel(
-          uid: const Uuid().v4(),
-          name: name,
-          email: email,
-          phone: phone,
-          role: 'member',
-          department: dept,
-          joinDate: DateTime.now(),
-        ));
-      }
+      final ext = file.extension?.toLowerCase();
+      final members = ext == 'csv'
+          ? _parseCsv(String.fromCharCodes(bytes))
+          : _parseExcel(bytes);
 
       if (members.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('불러올 데이터가 없습니다.'), backgroundColor: AppColors.warning),
+            const SnackBar(content: Text('불러올 데이터가 없습니다. 파일 형식을 확인해 주세요.'), backgroundColor: AppColors.warning),
           );
         }
         return;
       }
 
-      // 확인 다이얼로그
       if (!mounted) return;
       final confirm = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('엑셀 가져오기'),
-          content: Text('${members.length}명의 회원 정보를 가져옵니다.\n계속하시겠습니까?'),
+          title: const Text('회원 가져오기'),
+          content: Text('${members.length}명의 회원 정보를 가져옵니다.\n기존 목록에 추가됩니다.\n계속하시겠습니까?'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
             ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('가져오기')),
@@ -152,6 +187,88 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
         );
       }
     }
+  }
+
+  List<UserModel> _parseExcel(Uint8List bytes) {
+    final excel = Excel.decodeBytes(bytes);
+    final sheet = excel.tables.values.first;
+    final members = <UserModel>[];
+
+    // 컬럼: A=이름, B=팀/부서, C=전화번호, D=이메일
+    for (var i = 1; i < sheet.rows.length; i++) {
+      final row = sheet.rows[i];
+      if (row.isEmpty || row[0]?.value == null) continue;
+
+      final name = row[0]?.value?.toString().trim() ?? '';
+      final dept = row.length > 1 ? (row[1]?.value?.toString().trim() ?? '') : '';
+      final phone = row.length > 2 ? (row[2]?.value?.toString().trim() ?? '') : '';
+      final email = row.length > 3 ? (row[3]?.value?.toString().trim() ?? '') : '';
+
+      if (name.isEmpty) continue;
+
+      members.add(UserModel(
+        uid: const Uuid().v4(),
+        name: name,
+        email: email,
+        phone: phone,
+        role: 'member',
+        department: dept,
+        joinDate: DateTime.now(),
+      ));
+    }
+    return members;
+  }
+
+  List<UserModel> _parseCsv(String content) {
+    // BOM 제거
+    final cleaned = content.startsWith('﻿') ? content.substring(1) : content;
+    final lines = cleaned.split(RegExp(r'\r?\n'));
+    final members = <UserModel>[];
+
+    // 컬럼: 이름, 팀/부서, 전화번호, 이메일
+    for (var i = 1; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty) continue;
+
+      final cells = _splitCsvLine(line);
+      final name = cells.isNotEmpty ? cells[0].trim() : '';
+      final dept = cells.length > 1 ? cells[1].trim() : '';
+      final phone = cells.length > 2 ? cells[2].trim() : '';
+      final email = cells.length > 3 ? cells[3].trim() : '';
+
+      if (name.isEmpty) continue;
+
+      members.add(UserModel(
+        uid: const Uuid().v4(),
+        name: name,
+        email: email,
+        phone: phone,
+        role: 'member',
+        department: dept,
+        joinDate: DateTime.now(),
+      ));
+    }
+    return members;
+  }
+
+  List<String> _splitCsvLine(String line) {
+    final cells = <String>[];
+    final buffer = StringBuffer();
+    var inQuotes = false;
+
+    for (var i = 0; i < line.length; i++) {
+      final ch = line[i];
+      if (ch == '"') {
+        inQuotes = !inQuotes;
+      } else if (ch == ',' && !inQuotes) {
+        cells.add(buffer.toString());
+        buffer.clear();
+      } else {
+        buffer.write(ch);
+      }
+    }
+    cells.add(buffer.toString());
+    return cells;
   }
 
   void _showAddMemberDialog(BuildContext context) {
@@ -204,7 +321,7 @@ class _MemberTile extends StatelessWidget {
             ],
           ],
         ),
-        subtitle: Text('${member.department} · ${member.email}'),
+        subtitle: Text('${AppTeams.deptLabel(member.department)} · ${member.email}'),
         trailing: PopupMenuButton<String>(
           onSelected: (v) {
             if (v == 'edit') onEdit();
@@ -256,8 +373,9 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _emailCtrl;
   late final TextEditingController _phoneCtrl;
-  late final TextEditingController _deptCtrl;
+  late String _dept;
   late String _role;
+  late List<String> _permissions;
   bool _isLoading = false;
 
   bool get isEditing => widget.member != null;
@@ -268,8 +386,11 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     _nameCtrl = TextEditingController(text: widget.member?.name);
     _emailCtrl = TextEditingController(text: widget.member?.email);
     _phoneCtrl = TextEditingController(text: widget.member?.phone);
-    _deptCtrl = TextEditingController(text: widget.member?.department);
-    _role = widget.member?.role ?? 'member';
+    _dept = widget.member?.department ?? AppTeams.smallTeams.first;
+    // allDepts에 없는 값이면 기본값으로 fallback
+    if (!AppTeams.allDepts.contains(_dept)) _dept = AppTeams.smallTeams.first;
+    _role = widget.member?.role ?? UserRole.member;
+    _permissions = List<String>.from(widget.member?.permissions ?? []);
   }
 
   @override
@@ -277,7 +398,6 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
-    _deptCtrl.dispose();
     super.dispose();
   }
 
@@ -291,8 +411,9 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           name: _nameCtrl.text.trim(),
           email: _emailCtrl.text.trim(),
           phone: _phoneCtrl.text.trim(),
-          department: _deptCtrl.text.trim(),
+          department: _dept,
           role: _role,
+          permissions: _permissions,
         );
         await widget.service.updateUser(updated);
       } else {
@@ -302,8 +423,9 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           email: _emailCtrl.text.trim(),
           phone: _phoneCtrl.text.trim(),
           role: _role,
-          department: _deptCtrl.text.trim(),
+          department: _dept,
           joinDate: DateTime.now(),
+          permissions: _permissions,
         );
         await widget.service.importMembers([user]);
       }
@@ -342,20 +464,44 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
                 keyboardType: TextInputType.phone,
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _deptCtrl,
-                decoration: const InputDecoration(labelText: '부서/그룹'),
+              DropdownButtonFormField<String>(
+                initialValue: AppTeams.allDepts.contains(_dept) ? _dept : AppTeams.smallTeams.first,
+                decoration: const InputDecoration(labelText: '소속팀'),
+                items: AppTeams.allDepts.map((t) => DropdownMenuItem(
+                  value: t,
+                  child: Text(AppTeams.deptLabel(t)),
+                )).toList(),
+                onChanged: (v) => setState(() => _dept = v!),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: _role,
-                decoration: const InputDecoration(labelText: '권한'),
-                items: const [
-                  DropdownMenuItem(value: 'member', child: Text('일반 회원')),
-                  DropdownMenuItem(value: 'admin', child: Text('관리자')),
-                ],
+                initialValue: UserRole.labels.containsKey(_role) ? _role : UserRole.member,
+                decoration: const InputDecoration(labelText: '역할'),
+                items: UserRole.labels.entries
+                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                    .toList(),
                 onChanged: (v) => setState(() => _role = v!),
               ),
+              const SizedBox(height: 12),
+              // 임원팀인 경우에만 추가 권한 부여 옵션 표시
+              if (_role == UserRole.executive) ...[
+                const Divider(),
+                const Text('추가 권한 부여', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('심방 확정 권한', style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('심방 신청을 확정/완료 처리할 수 있습니다.', style: TextStyle(fontSize: 11)),
+                  value: _permissions.contains(AppPermission.visitConfirm),
+                  onChanged: (v) => setState(() {
+                    if (v == true) {
+                      _permissions = [..._permissions, AppPermission.visitConfirm];
+                    } else {
+                      _permissions = _permissions.where((p) => p != AppPermission.visitConfirm).toList();
+                    }
+                  }),
+                ),
+              ],
             ],
           ),
         ),

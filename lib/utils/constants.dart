@@ -25,8 +25,51 @@ class AppStrings {
 }
 
 class UserRole {
-  static const admin = 'admin';
   static const member = 'member';
+  static const smallLeader = 'small_leader';
+  static const midLeader = 'mid_leader';
+  static const executive = 'executive';
+  static const admin = 'admin';
+
+  static const Map<String, String> labels = {
+    member: '팀원',
+    smallLeader: '소팀장',
+    midLeader: '중팀장',
+    executive: '임원팀',
+    admin: '관리자',
+  };
+
+  static String label(String role) => labels[role] ?? role;
+}
+
+class AppPermission {
+  static const visitConfirm = 'visit_confirm';
+}
+
+class AppTeams {
+  static const midTeams = ['A', 'B', 'C', 'D'];
+
+  // X-0 = 중팀장 가상 소속팀, X-1~4 = 실제 소팀
+  static const allDepts = [
+    'A-0', 'A-1', 'A-2', 'A-3', 'A-4',
+    'B-0', 'B-1', 'B-2', 'B-3', 'B-4',
+    'C-0', 'C-1', 'C-2', 'C-3', 'C-4',
+    'D-0', 'D-1', 'D-2', 'D-3', 'D-4',
+  ];
+  static const smallTeams = [
+    'A-1', 'A-2', 'A-3', 'A-4',
+    'B-1', 'B-2', 'B-3', 'B-4',
+    'C-1', 'C-2', 'C-3', 'C-4',
+    'D-1', 'D-2', 'D-3', 'D-4',
+  ];
+
+  static List<String> smallTeamsOf(String mid) =>
+      smallTeams.where((t) => t.startsWith('$mid-')).toList();
+
+  static String deptLabel(String dept) {
+    if (dept.endsWith('-0')) return '$dept (중팀장)';
+    return dept;
+  }
 }
 
 class VisitStatus {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/banner_model.dart';
+import 'app_image.dart';
 
 class BannerSlider extends StatefulWidget {
   final List<BannerModel> banners;
@@ -70,18 +70,7 @@ class _BannerItem extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        CachedNetworkImage(
-          imageUrl: banner.imageUrl,
-          fit: BoxFit.cover,
-          placeholder: (_, __) => Container(
-            color: Colors.grey[200],
-            child: const Center(child: CircularProgressIndicator()),
-          ),
-          errorWidget: (_, __, ___) => Container(
-            color: Colors.grey[200],
-            child: const Icon(Icons.image_not_supported, size: 48, color: Colors.grey),
-          ),
-        ),
+        AppImage(imageUrl: banner.imageUrl, fit: BoxFit.cover),
         Positioned(
           bottom: 0,
           left: 0,

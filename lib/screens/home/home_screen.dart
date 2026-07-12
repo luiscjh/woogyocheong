@@ -26,14 +26,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = context.read<AuthProvider>().isAdmin;
+    final authProvider = context.read<AuthProvider>();
+    final canManage = authProvider.canManageMembers;
 
     final pages = [
       _HomeTab(firestoreService: _firestoreService, onNavigate: _navigateTo),
       const AttendanceScreen(),
       const FeeScreen(),
       const VisitScreen(),
-      if (isAdmin) const AdminDashboard(),
+      if (canManage) const AdminDashboard(),
     ];
 
     final destinations = [
@@ -41,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
       const NavigationDestination(icon: Icon(Icons.check_circle_outline), selectedIcon: Icon(Icons.check_circle), label: '출석'),
       const NavigationDestination(icon: Icon(Icons.payments_outlined), selectedIcon: Icon(Icons.payments), label: '회비'),
       const NavigationDestination(icon: Icon(Icons.favorite_border), selectedIcon: Icon(Icons.favorite), label: '심방'),
-      if (isAdmin)
+      if (canManage)
         const NavigationDestination(icon: Icon(Icons.admin_panel_settings_outlined), selectedIcon: Icon(Icons.admin_panel_settings), label: '관리'),
     ];
 

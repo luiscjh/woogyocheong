@@ -34,15 +34,13 @@ class _FeeScreenState extends State<FeeScreen> {
           }),
         ),
         Expanded(
-          child: authProvider.isAdmin
-              ? _AdminFeeView(year: _year, month: _month, service: _service)
-              : _MemberFeeView(
-                  userId: user.uid,
-                  userName: user.name,
-                  year: _year,
-                  month: _month,
-                  service: _service,
-                ),
+          child: authProvider.isExecutive
+              ? _AdminFeeView(year: _year, month: _month, service: _service, canEdit: true)
+              : authProvider.isMidLeader
+                  ? _AdminFeeView(year: _year, month: _month, service: _service, canEdit: false, midTeamFilter: user.midTeam)
+                  : authProvider.isSmallLeader
+                      ? _AdminFeeView(year: _year, month: _month, service: _service, canEdit: true, smallTeamFilter: user.department)
+                      : _MemberFeeView(userId: user.uid, userName: user.name, year: _year, month: _month, service: _service),
         ),
       ],
     );
@@ -236,8 +234,18 @@ class _AdminFeeView extends StatelessWidget {
   final int year;
   final int month;
   final FirestoreService service;
+  final bool canEdit;
+  final String? smallTeamFilter;
+  final String? midTeamFilter;
 
-  const _AdminFeeView({required this.year, required this.month, required this.service});
+  const _AdminFeeView({
+    required this.year,
+    required this.month,
+    required this.service,
+    this.canEdit = true,
+    this.smallTeamFilter,
+    this.midTeamFilter,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -250,9 +258,14 @@ class _AdminFeeView extends StatelessWidget {
             if (memberSnap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
-            final members = memberSnap.data ?? [];
+            var members = memberSnap.data ?? [];
+            if (smallTeamFilter != null) {
+              members = members.where((m) => m.department == smallTeamFilter).toList();
+            } else if (midTeamFilter != null) {
+              members = members.where((m) => m.midTeam == midTeamFilter).toList();
+            }
             final fees = {for (final f in feeSnap.data ?? []) f.userId: f};
-            final paidCount = fees.values.where((f) => f.isPaid).length;
+            final paidCount = members.where((m) => fees[m.uid]?.isPaid == true).length;
 
             return Column(
               children: [
@@ -296,20 +309,22 @@ class _AdminFeeView extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _FeeChip(isPaid: isPaid),
-                              const SizedBox(width: 8),
-                              PopupMenuButton<bool>(
-                                onSelected: (v) => service.setFee(
-                                  userId: m.uid,
-                                  userName: m.name,
-                                  year: year,
-                                  month: month,
-                                  isPaid: v,
+                              if (canEdit) ...[
+                                const SizedBox(width: 8),
+                                PopupMenuButton<bool>(
+                                  onSelected: (v) => service.setFee(
+                                    userId: m.uid,
+                                    userName: m.name,
+                                    year: year,
+                                    month: month,
+                                    isPaid: v,
+                                  ),
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(value: true, child: Text('납부')),
+                                    const PopupMenuItem(value: false, child: Text('미납')),
+                                  ],
                                 ),
-                                itemBuilder: (_) => [
-                                  const PopupMenuItem(value: true, child: Text('납부')),
-                                  const PopupMenuItem(value: false, child: Text('미납')),
-                                ],
-                              ),
+                              ],
                             ],
                           ),
                         ),

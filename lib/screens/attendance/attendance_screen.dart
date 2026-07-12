@@ -37,25 +37,32 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
+  // 출석체크(마킹)는 무조건 일요일 당일에만 가능 (조회는 언제든 가능)
+  bool get _isTodaySunday => DateTime.now().weekday == DateTime.sunday;
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser!;
+    final canEditToday = _isTodaySunday;
+
+    // 중팀장 이상: 팀 전체 조회, 소팀장: 본인 소팀 수정, 팀원: 본인만
+    Widget body;
+    if (authProvider.isExecutive) {
+      body = AttendanceAdminList(date: _selectedDate, service: _service, canEdit: canEditToday, canDownload: true);
+    } else if (authProvider.isMidLeader) {
+      body = AttendanceAdminList(date: _selectedDate, service: _service, canEdit: false, midTeamFilter: user.midTeam);
+    } else if (authProvider.isSmallLeader) {
+      body = AttendanceAdminList(date: _selectedDate, service: _service, canEdit: canEditToday, smallTeamFilter: user.department);
+    } else {
+      body = _MemberAttendanceView(userId: user.uid, userName: user.name, date: _selectedDate, service: _service, canEdit: canEditToday);
+    }
 
     return Scaffold(
       body: Column(
         children: [
           _DateHeader(date: _selectedDate, onTap: _pickDate),
-          Expanded(
-            child: authProvider.isAdmin
-                ? AttendanceAdminList(date: _selectedDate, service: _service)
-                : _MemberAttendanceView(
-                    userId: user.uid,
-                    userName: user.name,
-                    date: _selectedDate,
-                    service: _service,
-                  ),
-          ),
+          Expanded(child: body),
         ],
       ),
     );
@@ -97,12 +104,14 @@ class _MemberAttendanceView extends StatelessWidget {
   final String userName;
   final DateTime date;
   final FirestoreService service;
+  final bool canEdit;
 
   const _MemberAttendanceView({
     required this.userId,
     required this.userName,
     required this.date,
     required this.service,
+    required this.canEdit,
   });
 
   @override
@@ -148,27 +157,40 @@ class _MemberAttendanceView extends StatelessWidget {
                 style: const TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 40),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _setAttendance(context, true),
-                      icon: const Icon(Icons.check),
-                      label: const Text('출석'),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+              if (canEdit)
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _setAttendance(context, true),
+                        icon: const Icon(Icons.check),
+                        label: const Text('출석'),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _setAttendance(context, false),
-                      icon: const Icon(Icons.close),
-                      label: const Text('결석'),
-                      style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _setAttendance(context, false),
+                        icon: const Icon(Icons.close),
+                        label: const Text('결석'),
+                        style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+                      ),
                     ),
+                  ],
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
-              ),
+                  child: const Text(
+                    '출석체크는 주일(일요일)에만 가능합니다.',
+                    style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
+                  ),
+                ),
               const SizedBox(height: 40),
               _AttendanceHistory(userId: userId, service: service),
             ],

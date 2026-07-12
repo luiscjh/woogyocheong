@@ -1,14 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../services/firestore_service.dart';
 import '../../models/attendance_model.dart';
 import '../../models/user_model.dart';
 import '../../utils/constants.dart';
+import '../../utils/csv_download.dart';
 
 class AttendanceAdminList extends StatelessWidget {
   final DateTime date;
   final FirestoreService service;
+  final bool canEdit;
+  final String? smallTeamFilter; // 소팀장: 본인 소팀만
+  final String? midTeamFilter;   // 중팀장: 본인 중팀만
+  final bool canDownload;        // 임원팀/관리자만 명단 다운로드 가능
 
-  const AttendanceAdminList({super.key, required this.date, required this.service});
+  const AttendanceAdminList({
+    super.key,
+    required this.date,
+    required this.service,
+    this.canEdit = true,
+    this.smallTeamFilter,
+    this.midTeamFilter,
+    this.canDownload = false,
+  });
+
+  void _downloadCsv(List<UserModel> members, Map<String, AttendanceModel> attendances) {
+    final buffer = StringBuffer('이름,부서,상태\n');
+    for (final m in members) {
+      final isPresent = attendances[m.uid]?.isPresent ?? false;
+      buffer.writeln('${m.name},${m.department},${isPresent ? '출석' : '결석'}');
+    }
+    final filename = '출석부_${DateFormat('yyyyMMdd').format(date)}.csv';
+    downloadCsv(filename, buffer.toString());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,16 +45,25 @@ class AttendanceAdminList extends StatelessWidget {
             if (memberSnap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
-            final members = memberSnap.data ?? [];
-            final attendances = {
+            var members = memberSnap.data ?? [];
+            if (smallTeamFilter != null) {
+              members = members.where((m) => m.department == smallTeamFilter).toList();
+            } else if (midTeamFilter != null) {
+              members = members.where((m) => m.midTeam == midTeamFilter).toList();
+            }
+            final Map<String, AttendanceModel> attendances = {
               for (final a in attSnap.data ?? []) a.userId: a
             };
 
-            final presentCount = attendances.values.where((a) => a.isPresent).length;
+            final presentCount = members.where((m) => attendances[m.uid]?.isPresent == true).length;
 
             return Column(
               children: [
-                _SummaryBar(total: members.length, present: presentCount),
+                _SummaryBar(
+                  total: members.length,
+                  present: presentCount,
+                  onDownload: canDownload ? () => _downloadCsv(members, attendances) : null,
+                ),
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -58,19 +91,21 @@ class AttendanceAdminList extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _AttendanceChip(isPresent: isPresent),
-                              const SizedBox(width: 8),
-                              PopupMenuButton<bool>(
-                                onSelected: (v) => service.setAttendance(
-                                  userId: member.uid,
-                                  userName: member.name,
-                                  date: date,
-                                  isPresent: v,
+                              if (canEdit) ...[
+                                const SizedBox(width: 8),
+                                PopupMenuButton<bool>(
+                                  onSelected: (v) => service.setAttendance(
+                                    userId: member.uid,
+                                    userName: member.name,
+                                    date: date,
+                                    isPresent: v,
+                                  ),
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(value: true, child: Text('출석')),
+                                    const PopupMenuItem(value: false, child: Text('결석')),
+                                  ],
                                 ),
-                                itemBuilder: (_) => [
-                                  const PopupMenuItem(value: true, child: Text('출석')),
-                                  const PopupMenuItem(value: false, child: Text('결석')),
-                                ],
-                              ),
+                              ],
                             ],
                           ),
                         ),
@@ -90,8 +125,9 @@ class AttendanceAdminList extends StatelessWidget {
 class _SummaryBar extends StatelessWidget {
   final int total;
   final int present;
+  final VoidCallback? onDownload;
 
-  const _SummaryBar({required this.total, required this.present});
+  const _SummaryBar({required this.total, required this.present, this.onDownload});
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +147,12 @@ class _SummaryBar extends StatelessWidget {
             Text(
               '${(present / total * 100).toStringAsFixed(0)}%',
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary),
+            ),
+          if (onDownload != null)
+            IconButton(
+              icon: const Icon(Icons.download, color: AppColors.primary),
+              tooltip: '출석 명단 다운로드',
+              onPressed: onDownload,
             ),
         ],
       ),

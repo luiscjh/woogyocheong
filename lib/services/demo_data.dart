@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import '../models/user_model.dart';
 import '../models/attendance_model.dart';
 import '../models/fee_model.dart';
@@ -12,12 +13,36 @@ class DemoData {
 
   UserModel? currentUser;
 
+  // 데모 모드 업로드 이미지 인메모리 캐시 (mem://<key> → bytes)
+  final Map<String, Uint8List> _imageCache = {};
+
+  String cacheImage(Uint8List bytes) {
+    final key = 'img_${DateTime.now().millisecondsSinceEpoch}';
+    _imageCache[key] = bytes;
+    return 'mem://$key';
+  }
+
+  Uint8List? getImageBytes(String url) {
+    if (!url.startsWith('mem://')) return null;
+    return _imageCache[url.substring(6)];
+  }
+
   final List<UserModel> _users = [
-    UserModel(uid: 'admin001', name: '김관리', email: 'admin@church.com', phone: '010-1234-5678', role: 'admin', department: '청년부', joinDate: DateTime(2020, 1, 1)),
-    UserModel(uid: 'member001', name: '이청년', email: 'lee@church.com', phone: '010-2345-6789', role: 'member', department: '1부', joinDate: DateTime(2021, 3, 1)),
-    UserModel(uid: 'member002', name: '박믿음', email: 'park@church.com', phone: '010-3456-7890', role: 'member', department: '2부', joinDate: DateTime(2021, 6, 1)),
-    UserModel(uid: 'member003', name: '최소망', email: 'choi@church.com', phone: '010-4567-8901', role: 'member', department: '1부', joinDate: DateTime(2022, 1, 1)),
-    UserModel(uid: 'member004', name: '정사랑', email: 'jung@church.com', phone: '010-5678-9012', role: 'member', department: '2부', joinDate: DateTime(2022, 3, 1)),
+    UserModel(uid: 'admin001', name: '김관리', email: 'admin@church.com', phone: '010-1234-5678', role: 'admin', department: 'A-1', joinDate: DateTime(2020, 1, 1)),
+    // 임원팀 (심방 확정 권한 부여됨)
+    UserModel(uid: 'exec001', name: '이임원', email: 'exec@church.com', phone: '010-1111-2222', role: 'executive', department: 'A-1', joinDate: DateTime(2020, 6, 1), permissions: ['visit_confirm']),
+    // 중팀장
+    UserModel(uid: 'mid001', name: '박중팀', email: 'mid@church.com', phone: '010-2222-3333', role: 'mid_leader', department: 'A-0', joinDate: DateTime(2021, 1, 1)),
+    UserModel(uid: 'mid002', name: '최중팀', email: 'midb@church.com', phone: '010-3333-4444', role: 'mid_leader', department: 'B-0', joinDate: DateTime(2021, 1, 1)),
+    // 소팀장
+    UserModel(uid: 'small001', name: '정소팀', email: 'small@church.com', phone: '010-4444-5555', role: 'small_leader', department: 'A-1', joinDate: DateTime(2021, 6, 1)),
+    UserModel(uid: 'small002', name: '한소팀', email: 'smallb@church.com', phone: '010-5555-6666', role: 'small_leader', department: 'A-2', joinDate: DateTime(2021, 6, 1)),
+    // 팀원
+    UserModel(uid: 'member001', name: '이청년', email: 'lee@church.com', phone: '010-2345-6789', role: 'member', department: 'A-1', joinDate: DateTime(2021, 3, 1)),
+    UserModel(uid: 'member002', name: '박믿음', email: 'park@church.com', phone: '010-3456-7890', role: 'member', department: 'A-2', joinDate: DateTime(2021, 6, 1)),
+    UserModel(uid: 'member003', name: '최소망', email: 'choi@church.com', phone: '010-4567-8901', role: 'member', department: 'A-1', joinDate: DateTime(2022, 1, 1)),
+    UserModel(uid: 'member004', name: '정사랑', email: 'jung@church.com', phone: '010-5678-9012', role: 'member', department: 'B-1', joinDate: DateTime(2022, 3, 1)),
+    UserModel(uid: 'member005', name: '강기쁨', email: 'kang@church.com', phone: '010-6789-0123', role: 'member', department: 'B-2', joinDate: DateTime(2022, 6, 1)),
   ];
 
   final List<AttendanceModel> _attendance = [];
@@ -119,22 +144,18 @@ class DemoData {
   // ── Attendance ─────────────────────────────────────────────
   Stream<List<AttendanceModel>> streamAttendanceByDate(DateTime date) {
     final dateStr = AttendanceModel.dateKey(date);
-    final filtered = _attendance
-        .where((a) => AttendanceModel.dateKey(a.date) == dateStr)
-        .toList();
-    final ctrl = StreamController<List<AttendanceModel>>.broadcast();
-    Future.microtask(() => ctrl.add(filtered));
-    return ctrl.stream;
+    Future.microtask(() => _attendanceCtrl.add(List.from(_attendance)));
+    return _attendanceCtrl.stream.map(
+      (list) => list.where((a) => AttendanceModel.dateKey(a.date) == dateStr).toList(),
+    );
   }
 
   Stream<List<AttendanceModel>> streamUserAttendance(String userId) {
-    final filtered = _attendance
-        .where((a) => a.userId == userId)
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
-    final ctrl = StreamController<List<AttendanceModel>>.broadcast();
-    Future.microtask(() => ctrl.add(filtered));
-    return ctrl.stream;
+    Future.microtask(() => _attendanceCtrl.add(List.from(_attendance)));
+    return _attendanceCtrl.stream.map(
+      (list) => (list.where((a) => a.userId == userId).toList()
+        ..sort((a, b) => b.date.compareTo(a.date))),
+    );
   }
 
   AttendanceModel? getAttendance(String userId, DateTime date) {
@@ -156,18 +177,18 @@ class DemoData {
 
   // ── Fees ───────────────────────────────────────────────────
   Stream<List<FeeModel>> streamFeesByPeriod(int year, int month) {
-    final filtered = _fees.where((f) => f.year == year && f.month == month).toList();
-    final ctrl = StreamController<List<FeeModel>>.broadcast();
-    Future.microtask(() => ctrl.add(filtered));
-    return ctrl.stream;
+    Future.microtask(() => _feesCtrl.add(List.from(_fees)));
+    return _feesCtrl.stream.map(
+      (list) => list.where((f) => f.year == year && f.month == month).toList(),
+    );
   }
 
   Stream<List<FeeModel>> streamUserFees(String userId) {
-    final filtered = _fees.where((f) => f.userId == userId).toList()
-      ..sort((a, b) => b.year != a.year ? b.year.compareTo(a.year) : b.month.compareTo(a.month));
-    final ctrl = StreamController<List<FeeModel>>.broadcast();
-    Future.microtask(() => ctrl.add(filtered));
-    return ctrl.stream;
+    Future.microtask(() => _feesCtrl.add(List.from(_fees)));
+    return _feesCtrl.stream.map(
+      (list) => (list.where((f) => f.userId == userId).toList()
+        ..sort((a, b) => b.year != a.year ? b.year.compareTo(a.year) : b.month.compareTo(a.month))),
+    );
   }
 
   FeeModel? getFee(String userId, int year, int month) {
@@ -187,19 +208,18 @@ class DemoData {
 
   // ── Visits ─────────────────────────────────────────────────
   Stream<List<VisitModel>> streamAllVisits() {
-    final sorted = List<VisitModel>.from(_visits)
-      ..sort((a, b) => b.requestDate.compareTo(a.requestDate));
-    final ctrl = StreamController<List<VisitModel>>.broadcast();
-    Future.microtask(() => ctrl.add(sorted));
-    return ctrl.stream;
+    Future.microtask(() => _visitsCtrl.add(List.from(_visits)));
+    return _visitsCtrl.stream.map(
+      (list) => (List<VisitModel>.from(list)..sort((a, b) => b.requestDate.compareTo(a.requestDate))),
+    );
   }
 
   Stream<List<VisitModel>> streamUserVisits(String userId) {
-    final filtered = _visits.where((v) => v.userId == userId).toList()
-      ..sort((a, b) => b.requestDate.compareTo(a.requestDate));
-    final ctrl = StreamController<List<VisitModel>>.broadcast();
-    Future.microtask(() => ctrl.add(filtered));
-    return ctrl.stream;
+    Future.microtask(() => _visitsCtrl.add(List.from(_visits)));
+    return _visitsCtrl.stream.map(
+      (list) => (list.where((v) => v.userId == userId).toList()
+        ..sort((a, b) => b.requestDate.compareTo(a.requestDate))),
+    );
   }
 
   void addVisit(VisitModel visit) {
@@ -222,20 +242,17 @@ class DemoData {
 
   // ── Banners ────────────────────────────────────────────────
   Stream<List<BannerModel>> streamActiveBanners() {
-    final filtered = _banners.where((b) => b.isActive).toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
-    final ctrl = StreamController<List<BannerModel>>.broadcast();
-    Future.microtask(() => ctrl.add(filtered));
-    return ctrl.stream;
+    Future.microtask(() => _bannersCtrl.add(_sortedBanners()));
+    return _bannersCtrl.stream.map((list) => list.where((b) => b.isVisibleNow).toList());
   }
 
   Stream<List<BannerModel>> streamAllBanners() {
-    final sorted = List<BannerModel>.from(_banners)
-      ..sort((a, b) => a.order.compareTo(b.order));
-    final ctrl = StreamController<List<BannerModel>>.broadcast();
-    Future.microtask(() => ctrl.add(sorted));
-    return ctrl.stream;
+    Future.microtask(() => _bannersCtrl.add(_sortedBanners()));
+    return _bannersCtrl.stream;
   }
+
+  List<BannerModel> _sortedBanners() =>
+      (List<BannerModel>.from(_banners)..sort((a, b) => a.order.compareTo(b.order)));
 
   void addBanner(BannerModel banner) {
     final id = 'banner_${DateTime.now().millisecondsSinceEpoch}';
@@ -244,17 +261,17 @@ class DemoData {
       imageUrl: banner.imageUrl, order: _banners.length,
       isActive: banner.isActive, createdAt: banner.createdAt,
     ));
-    _bannersCtrl.add(List.from(_banners));
+    _bannersCtrl.add(_sortedBanners());
   }
 
   void updateBanner(BannerModel banner) {
     final idx = _banners.indexWhere((b) => b.id == banner.id);
     if (idx >= 0) _banners[idx] = banner;
-    _bannersCtrl.add(List.from(_banners));
+    _bannersCtrl.add(_sortedBanners());
   }
 
   void deleteBanner(String id) {
     _banners.removeWhere((b) => b.id == id);
-    _bannersCtrl.add(List.from(_banners));
+    _bannersCtrl.add(_sortedBanners());
   }
 }

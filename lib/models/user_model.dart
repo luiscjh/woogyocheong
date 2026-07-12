@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/constants.dart';
 
 class UserModel {
   final String uid;
@@ -6,9 +7,10 @@ class UserModel {
   final String email;
   final String phone;
   final String role;
-  final String department;
+  final String department; // 소팀 (A-1 ~ D-4)
   final DateTime joinDate;
   final String? profileImageUrl;
+  final List<String> permissions; // 관리자가 부여한 추가 권한
 
   UserModel({
     required this.uid,
@@ -19,9 +21,20 @@ class UserModel {
     required this.department,
     required this.joinDate,
     this.profileImageUrl,
+    this.permissions = const [],
   });
 
-  bool get isAdmin => role == 'admin';
+  // 역할 계층 헬퍼
+  bool get isAdmin => role == UserRole.admin;
+  bool get isExecutive => role == UserRole.executive || isAdmin;
+  bool get isMidLeader => role == UserRole.midLeader || isExecutive;
+  bool get isSmallLeader => role == UserRole.smallLeader || isMidLeader;
+
+  // 소속 중팀 (department 'A-1' → 'A')
+  String get midTeam => department.contains('-') ? department.split('-')[0] : '';
+
+  // 추가 권한 확인 (관리자는 항상 true)
+  bool hasPermission(String perm) => isAdmin || permissions.contains(perm);
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -34,6 +47,7 @@ class UserModel {
       department: data['department'] ?? '',
       joinDate: (data['joinDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
       profileImageUrl: data['profileImageUrl'],
+      permissions: List<String>.from(data['permissions'] ?? []),
     );
   }
 
@@ -46,6 +60,7 @@ class UserModel {
       'department': department,
       'joinDate': Timestamp.fromDate(joinDate),
       'profileImageUrl': profileImageUrl,
+      'permissions': permissions,
     };
   }
 
@@ -57,6 +72,7 @@ class UserModel {
     String? department,
     DateTime? joinDate,
     String? profileImageUrl,
+    List<String>? permissions,
   }) {
     return UserModel(
       uid: uid,
@@ -67,6 +83,7 @@ class UserModel {
       department: department ?? this.department,
       joinDate: joinDate ?? this.joinDate,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
+      permissions: permissions ?? this.permissions,
     );
   }
 }

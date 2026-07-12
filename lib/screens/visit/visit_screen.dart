@@ -15,9 +15,12 @@ class VisitScreen extends StatelessWidget {
     final authProvider = context.watch<AuthProvider>();
     final service = FirestoreService();
 
-    return authProvider.isAdmin
-        ? _AdminVisitView(service: service)
-        : _MemberVisitView(service: service, user: authProvider.currentUser!);
+    if (authProvider.isAdmin) {
+      return _AdminVisitView(service: service, canConfirm: true);
+    } else if (authProvider.isExecutive) {
+      return _AdminVisitView(service: service, canConfirm: authProvider.canConfirmVisit);
+    }
+    return _MemberVisitView(service: service, user: authProvider.currentUser!);
   }
 }
 
@@ -299,8 +302,9 @@ class _VisitCard extends StatelessWidget {
 
 class _AdminVisitView extends StatelessWidget {
   final FirestoreService service;
+  final bool canConfirm;
 
-  const _AdminVisitView({required this.service});
+  const _AdminVisitView({required this.service, this.canConfirm = false});
 
   @override
   Widget build(BuildContext context) {
@@ -334,7 +338,7 @@ class _AdminVisitView extends StatelessWidget {
                   : ListView.builder(
                       padding: const EdgeInsets.all(12),
                       itemCount: visits.length,
-                      itemBuilder: (ctx, i) => _AdminVisitCard(visit: visits[i], service: service),
+                      itemBuilder: (ctx, i) => _AdminVisitCard(visit: visits[i], service: service, canConfirm: canConfirm),
                     ),
             ),
           ],
@@ -347,8 +351,9 @@ class _AdminVisitView extends StatelessWidget {
 class _AdminVisitCard extends StatelessWidget {
   final VisitModel visit;
   final FirestoreService service;
+  final bool canConfirm;
 
-  const _AdminVisitCard({required this.visit, required this.service});
+  const _AdminVisitCard({required this.visit, required this.service, this.canConfirm = false});
 
   @override
   Widget build(BuildContext context) {
@@ -385,25 +390,27 @@ class _AdminVisitCard extends StatelessWidget {
             if (visit.preferredDate != null)
               Text('선호일: ${DateFormat('yyyy/MM/dd', 'ko').format(visit.preferredDate!)}'),
             if (visit.reason != null) Text(visit.reason!),
-            const Divider(height: 16),
-            Row(
-              children: [
-                for (final status in ['confirmed', 'completed', 'cancelled'])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: TextButton(
-                      onPressed: visit.status == status
-                          ? null
-                          : () => _updateStatus(context, status),
-                      style: TextButton.styleFrom(
-                        foregroundColor: VisitStatus.color(status),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            if (canConfirm) ...[
+              const Divider(height: 16),
+              Row(
+                children: [
+                  for (final status in ['confirmed', 'completed', 'cancelled'])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: TextButton(
+                        onPressed: visit.status == status
+                            ? null
+                            : () => _updateStatus(context, status),
+                        style: TextButton.styleFrom(
+                          foregroundColor: VisitStatus.color(status),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        ),
+                        child: Text(VisitStatus.label(status), style: const TextStyle(fontSize: 12)),
                       ),
-                      child: Text(VisitStatus.label(status), style: const TextStyle(fontSize: 12)),
                     ),
-                  ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

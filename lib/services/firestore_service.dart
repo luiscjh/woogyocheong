@@ -4,6 +4,7 @@ import '../models/attendance_model.dart';
 import '../models/fee_model.dart';
 import '../models/visit_model.dart';
 import '../models/banner_model.dart';
+import '../utils/constants.dart';
 import 'demo_data.dart';
 
 // demoMode = true 이면 Firebase 없이 인메모리 저장소를 사용
@@ -34,6 +35,12 @@ class FirestoreService {
   Future<void> deleteUser(String uid) async {
     if (demoMode) { _demo.deleteUser(uid); return; }
     await _db.collection('users').doc(uid).delete();
+  }
+
+  // 역할 양도: outgoing의 역할/추가 권한을 incoming에게 넘기고 outgoing은 팀원으로 전환
+  Future<void> transferRole(UserModel outgoing, UserModel incoming) async {
+    await updateUser(incoming.copyWith(role: outgoing.role, permissions: outgoing.permissions));
+    await updateUser(outgoing.copyWith(role: UserRole.member, permissions: const []));
   }
 
   Future<void> importMembers(List<UserModel> members) async {

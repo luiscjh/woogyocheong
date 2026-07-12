@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -37,6 +38,8 @@ class ChurchYouthApp extends StatelessWidget {
         title: '우교청',
         theme: buildAppTheme(),
         debugShowCheckedModeBanner: false,
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        supportedLocales: const [Locale('ko'), Locale('en')],
         home: const _RootRouter(),
       ),
     );
