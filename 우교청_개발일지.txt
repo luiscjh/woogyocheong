@@ -353,8 +353,8 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   demoMode = true (Firebase 없이 인메모리 데이터로 실행 중)
-  브랜치: main. 1~3차 작업은 커밋(6f6ed093) 및 push 완료.
-  4~5차 작업(이 문서의 위 내용)은 아직 미커밋 상태.
+  브랜치: main. 1~3차 작업은 커밋(6f6ed093), 4~5차 작업은 커밋
+  (8153b6fa)으로 각각 GitHub(origin/main) push 완료.
 
   웹 실행 명령:
     export PATH="$PATH:/Users/choejaehyeon/development/flutter/bin"
@@ -364,7 +364,6 @@
 [남은 작업 (TODO)]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  [ ] 4~5차 작업 변경사항 git commit 및 GitHub push
   [ ] Firebase 실제 프로젝트 연결
         - firebase_options.dart 실제 키로 교체
         - demoMode = false 로 변경
