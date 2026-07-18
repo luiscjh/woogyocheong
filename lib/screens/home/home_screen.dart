@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/banner_model.dart';
+import '../../models/attendance_model.dart';
+import '../../models/new_family_rotation_model.dart';
+import '../../models/user_model.dart';
 import '../../utils/constants.dart';
 import '../../widgets/banner_slider.dart';
 import '../attendance/attendance_screen.dart';
@@ -95,9 +98,20 @@ class _HomeTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '안녕하세요, ${user?.name ?? ''}님! 👋',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '안녕하세요, ${user?.name ?? ''}님! 👋',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    // 새가족팀장/리더(운영진)는 제외하고, 3주간 팀모임을 진행해야 하는 신규 새가족(일반 회원)에게만 표시
+                    if (user != null && user.department == AppTeams.newFamilyTeam && user.role == UserRole.member)
+                      _NewFamilyWeekBadge(firestoreService: firestoreService, userId: user.uid),
+                    // 새가족팀 리더에게는 새가족팀장이 설정한 로테이션 기준, 이번 주가 본인 담당 주차일 때만 표시
+                    if (user != null && user.department == AppTeams.newFamilyTeam && user.role == UserRole.smallLeader)
+                      _NewFamilyLeaderRotationBadge(firestoreService: firestoreService, userId: user.uid),
+                  ],
                 ),
                 Text(
                   user?.department ?? '',
@@ -191,6 +205,95 @@ class _FeatureCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// 새가족팀 배정 후 실제 소팀에 배정받기 전까지, 본인 출석 횟수 기준 'n주차'를 표시
+class _NewFamilyWeekBadge extends StatelessWidget {
+  final FirestoreService firestoreService;
+  final String userId;
+
+  const _NewFamilyWeekBadge({required this.firestoreService, required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AttendanceModel>>(
+      stream: firestoreService.streamUserAttendance(userId),
+      builder: (ctx, snap) {
+        final weekCount = (snap.data ?? []).where((a) => a.isPresent).length;
+        // 새가족 출석은 정해진 주차까지만 표시 (그 이후는 소팀 배정 대상)
+        final displayWeek = weekCount > AppTeams.newFamilyMaxWeeks ? AppTeams.newFamilyMaxWeeks : weekCount;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.accent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            '$displayWeek주차',
+            style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// 새가족팀장이 1~3주차별로 고정 배정한 담당 리더 중, 본인이 배정된 주차에
+// '현재' 해당하는 새가족(출석 횟수 기준)이 있을 때만 'N주차 담당' 표시
+class _NewFamilyLeaderRotationBadge extends StatelessWidget {
+  final FirestoreService firestoreService;
+  final String userId;
+
+  const _NewFamilyLeaderRotationBadge({required this.firestoreService, required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<NewFamilyRotationModel>>(
+      stream: firestoreService.streamNewFamilyRotations(),
+      builder: (ctx, rotSnap) {
+        final myWeeks = (rotSnap.data ?? []).where((r) => r.leaderId == userId).map((r) => r.weekNumber).toSet();
+        if (myWeeks.isEmpty) return const SizedBox.shrink();
+
+        return StreamBuilder<List<UserModel>>(
+          stream: firestoreService.streamAllMembers(),
+          builder: (ctx, memberSnap) {
+            return StreamBuilder<List<AttendanceModel>>(
+              stream: firestoreService.streamAllAttendance(),
+              builder: (ctx, attSnap) {
+                final members = memberSnap.data ?? [];
+                final attendance = attSnap.data ?? [];
+                final newFamilyMembers =
+                    members.where((m) => m.department == AppTeams.newFamilyTeam && m.role == UserRole.member);
+
+                final matchedWeeks = <int>{};
+                for (final m in newFamilyMembers) {
+                  final count = attendance.where((a) => a.userId == m.uid && a.isPresent).length;
+                  if (myWeeks.contains(count) && count >= 1 && count <= AppTeams.newFamilyMaxWeeks) {
+                    matchedWeeks.add(count);
+                  }
+                }
+                if (matchedWeeks.isEmpty) return const SizedBox.shrink();
+
+                final sortedWeeks = matchedWeeks.toList()..sort();
+                final label = sortedWeeks.map((w) => '$w주차').join('·');
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$label 담당',
+                    style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

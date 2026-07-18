@@ -5,7 +5,8 @@ class VisitModel {
   final String userId;
   final String userName;
   final String phone;
-  final String address;
+  final String deptName; // 부서명 (중팀)
+  final String team;     // 팀 (소팀)
   final DateTime requestDate;
   final DateTime? preferredDate;
   final String status;
@@ -17,7 +18,8 @@ class VisitModel {
     required this.userId,
     required this.userName,
     required this.phone,
-    required this.address,
+    required this.deptName,
+    required this.team,
     required this.requestDate,
     this.preferredDate,
     required this.status,
@@ -32,7 +34,8 @@ class VisitModel {
       userId: data['userId'] ?? '',
       userName: data['userName'] ?? '',
       phone: data['phone'] ?? '',
-      address: data['address'] ?? '',
+      deptName: data['deptName'] ?? '',
+      team: data['team'] ?? '',
       requestDate: (data['requestDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
       preferredDate: (data['preferredDate'] as Timestamp?)?.toDate(),
       status: data['status'] ?? 'pending',
@@ -46,7 +49,8 @@ class VisitModel {
       'userId': userId,
       'userName': userName,
       'phone': phone,
-      'address': address,
+      'deptName': deptName,
+      'team': team,
       'requestDate': Timestamp.fromDate(requestDate),
       'preferredDate': preferredDate != null ? Timestamp.fromDate(preferredDate!) : null,
       'status': status,

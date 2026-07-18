@@ -6,6 +6,8 @@ import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
+import '../../models/attendance_model.dart';
+import '../../models/new_family_rotation_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/constants.dart';
 
@@ -23,6 +25,12 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final currentUser = authProvider.currentUser!;
+
+    // 새가족팀 리더는 팀 전체 명단(팀장/다른 리더 포함)이 아니라, 본인이
+    // 배정된 주차에 해당하는 새가족만 확인하면 되므로 화면을 대체
+    if (currentUser.role == UserRole.smallLeader && currentUser.department == AppTeams.newFamilyTeam) {
+      return _LeaderAssignedFamilyView(service: _service, currentUser: currentUser);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -46,7 +54,8 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          var members = snap.data ?? [];
+          // 목사님은 회원 관리 대상에서 제외
+          var members = (snap.data ?? []).where((m) => m.role != UserRole.pastor).toList();
           // 역할에 따라 조회 범위 제한
           if (!authProvider.isExecutive) {
             if (authProvider.isMidLeader) {
@@ -286,6 +295,118 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
   }
 }
 
+// 새가족팀 리더 전용 뷰: 팀 전체 명단 대신, 본인이 배정된 주차(1~3주차)에
+// 해당하는 새가족만 읽기 전용으로 보여줌
+class _LeaderAssignedFamilyView extends StatelessWidget {
+  final FirestoreService service;
+  final UserModel currentUser;
+
+  const _LeaderAssignedFamilyView({required this.service, required this.currentUser});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('회원 관리')),
+      body: StreamBuilder<List<UserModel>>(
+        stream: service.streamAllMembers(),
+        builder: (ctx, memberSnap) {
+          return StreamBuilder<List<AttendanceModel>>(
+            stream: service.streamAllAttendance(),
+            builder: (ctx, attSnap) {
+              return StreamBuilder<List<NewFamilyRotationModel>>(
+                stream: service.streamNewFamilyRotations(),
+                builder: (ctx, rotSnap) {
+                  if (memberSnap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final members = memberSnap.data ?? [];
+                  final attendance = attSnap.data ?? [];
+                  final rotations = rotSnap.data ?? [];
+
+                  final myWeeks = rotations
+                      .where((r) => r.leaderId == currentUser.uid)
+                      .map((r) => r.weekNumber)
+                      .toList()
+                    ..sort();
+
+                  if (myWeeks.isEmpty) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text('아직 배정된 담당 주차가 없습니다.', style: TextStyle(color: AppColors.textSecondary)),
+                      ),
+                    );
+                  }
+
+                  // 새가족(일반 회원)의 현재 주차를 출석 횟수 기준으로 계산
+                  final newFamilyMembers = members
+                      .where((m) => m.department == AppTeams.newFamilyTeam && m.role == UserRole.member)
+                      .toList();
+                  final weekOf = <String, int>{};
+                  for (final m in newFamilyMembers) {
+                    final count = attendance.where((a) => a.userId == m.uid && a.isPresent).length;
+                    if (count >= 1 && count <= AppTeams.newFamilyMaxWeeks) {
+                      weekOf[m.uid] = count;
+                    }
+                  }
+
+                  return ListView(
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      for (final week in myWeeks)
+                        Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('$week주차 담당', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                const SizedBox(height: 8),
+                                const Text('현재 이 주차에 해당하는 새가족', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                const SizedBox(height: 4),
+                                Builder(builder: (ctx) {
+                                  final names = [
+                                    for (final m in newFamilyMembers)
+                                      if (weekOf[m.uid] == week) m.name,
+                                  ];
+                                  if (names.isEmpty) {
+                                    return const Text('현재 이 주차에 해당하는 새가족이 없습니다.',
+                                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary));
+                                  }
+                                  return Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: names
+                                        .map((name) => Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primary.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(10),
+                                              ),
+                                              child: Text(name,
+                                                  style: const TextStyle(
+                                                      color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600)),
+                                            ))
+                                        .toList(),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _MemberTile extends StatelessWidget {
   final UserModel member;
   final FirestoreService service;
@@ -316,7 +437,7 @@ class _MemberTile extends StatelessWidget {
                   color: AppColors.accent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text('관리자', style: TextStyle(color: AppColors.accent, fontSize: 10)),
+                child: Text(UserRole.label(member.role), style: const TextStyle(color: AppColors.accent, fontSize: 10)),
               ),
             ],
           ],
@@ -375,7 +496,6 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
   late final TextEditingController _phoneCtrl;
   late String _dept;
   late String _role;
-  late List<String> _permissions;
   bool _isLoading = false;
 
   bool get isEditing => widget.member != null;
@@ -390,7 +510,6 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     // allDepts에 없는 값이면 기본값으로 fallback
     if (!AppTeams.allDepts.contains(_dept)) _dept = AppTeams.smallTeams.first;
     _role = widget.member?.role ?? UserRole.member;
-    _permissions = List<String>.from(widget.member?.permissions ?? []);
   }
 
   @override
@@ -413,7 +532,6 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           phone: _phoneCtrl.text.trim(),
           department: _dept,
           role: _role,
-          permissions: _permissions,
         );
         await widget.service.updateUser(updated);
       } else {
@@ -425,7 +543,6 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           role: _role,
           department: _dept,
           joinDate: DateTime.now(),
-          permissions: _permissions,
         );
         await widget.service.importMembers([user]);
       }
@@ -482,26 +599,6 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
                     .toList(),
                 onChanged: (v) => setState(() => _role = v!),
               ),
-              const SizedBox(height: 12),
-              // 임원팀인 경우에만 추가 권한 부여 옵션 표시
-              if (_role == UserRole.executive) ...[
-                const Divider(),
-                const Text('추가 권한 부여', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                CheckboxListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('심방 확정 권한', style: TextStyle(fontSize: 13)),
-                  subtitle: const Text('심방 신청을 확정/완료 처리할 수 있습니다.', style: TextStyle(fontSize: 11)),
-                  value: _permissions.contains(AppPermission.visitConfirm),
-                  onChanged: (v) => setState(() {
-                    if (v == true) {
-                      _permissions = [..._permissions, AppPermission.visitConfirm];
-                    } else {
-                      _permissions = _permissions.where((p) => p != AppPermission.visitConfirm).toList();
-                    }
-                  }),
-                ),
-              ],
             ],
           ),
         ),

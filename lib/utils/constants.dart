@@ -29,6 +29,7 @@ class UserRole {
   static const smallLeader = 'small_leader';
   static const midLeader = 'mid_leader';
   static const executive = 'executive';
+  static const pastor = 'pastor';
   static const admin = 'admin';
 
   static const Map<String, String> labels = {
@@ -36,18 +37,22 @@ class UserRole {
     smallLeader: '소팀장',
     midLeader: '중팀장',
     executive: '임원팀',
+    pastor: '목사님',
     admin: '관리자',
   };
 
   static String label(String role) => labels[role] ?? role;
 }
 
-class AppPermission {
-  static const visitConfirm = 'visit_confirm';
-}
-
 class AppTeams {
   static const midTeams = ['A', 'B', 'C', 'D'];
+
+  // 임원팀: 소팀 없이 임원팀 그 자체가 소속팀
+  static const executiveTeam = '임원팀';
+  // 새가족팀: 중팀에 속하지 않는 독립된 소팀
+  static const newFamilyTeam = '새가족팀';
+  // 새가족 출석은 이 주차까지만 진행하고 이후 실제 소팀으로 배정됨
+  static const newFamilyMaxWeeks = 3;
 
   // X-0 = 중팀장 가상 소속팀, X-1~4 = 실제 소팀
   static const allDepts = [
@@ -55,12 +60,15 @@ class AppTeams {
     'B-0', 'B-1', 'B-2', 'B-3', 'B-4',
     'C-0', 'C-1', 'C-2', 'C-3', 'C-4',
     'D-0', 'D-1', 'D-2', 'D-3', 'D-4',
+    newFamilyTeam,
+    executiveTeam,
   ];
   static const smallTeams = [
     'A-1', 'A-2', 'A-3', 'A-4',
     'B-1', 'B-2', 'B-3', 'B-4',
     'C-1', 'C-2', 'C-3', 'C-4',
     'D-1', 'D-2', 'D-3', 'D-4',
+    newFamilyTeam,
   ];
 
   static List<String> smallTeamsOf(String mid) =>

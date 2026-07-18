@@ -258,7 +258,8 @@ class _AdminFeeView extends StatelessWidget {
             if (memberSnap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
-            var members = memberSnap.data ?? [];
+            // 목사님은 회비 납부 대상에서 제외
+            var members = (memberSnap.data ?? []).where((m) => m.role != UserRole.pastor).toList();
             if (smallTeamFilter != null) {
               members = members.where((m) => m.department == smallTeamFilter).toList();
             } else if (midTeamFilter != null) {

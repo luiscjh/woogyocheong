@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/visit_model.dart';
+import '../../models/visit_slot_model.dart';
 import '../../utils/constants.dart';
 
 class VisitScreen extends StatelessWidget {
@@ -14,13 +15,13 @@ class VisitScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final service = FirestoreService();
+    final user = authProvider.currentUser!;
 
-    if (authProvider.isAdmin) {
+    // 심방 신청 내용은 신청자 본인과 목사님만 조회 가능 (관리자 포함 그 외 전원은 본인 신청 내역만 조회)
+    if (user.role == UserRole.pastor) {
       return _AdminVisitView(service: service, canConfirm: true);
-    } else if (authProvider.isExecutive) {
-      return _AdminVisitView(service: service, canConfirm: authProvider.canConfirmVisit);
     }
-    return _MemberVisitView(service: service, user: authProvider.currentUser!);
+    return _MemberVisitView(service: service, user: user);
   }
 }
 
@@ -101,14 +102,32 @@ class _VisitRequestForm extends StatefulWidget {
 
 class _VisitRequestFormState extends State<_VisitRequestForm> {
   final _formKey = GlobalKey<FormState>();
-  final _addressCtrl = TextEditingController();
+  late final TextEditingController _deptCtrl;
+  late final TextEditingController _teamCtrl;
+  late final TextEditingController _nameCtrl;
   final _reasonCtrl = TextEditingController();
   DateTime? _preferredDate;
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _deptCtrl = TextEditingController(text: '청년부');
+    final String dept = widget.user.department;
+    final String teamText = AppTeams.smallTeams.contains(dept)
+        ? dept
+        : dept == AppTeams.executiveTeam
+            ? AppTeams.executiveTeam
+            : '새가족';
+    _teamCtrl = TextEditingController(text: teamText);
+    _nameCtrl = TextEditingController(text: widget.user.name);
+  }
+
+  @override
   void dispose() {
-    _addressCtrl.dispose();
+    _deptCtrl.dispose();
+    _teamCtrl.dispose();
+    _nameCtrl.dispose();
     _reasonCtrl.dispose();
     super.dispose();
   }
@@ -120,9 +139,10 @@ class _VisitRequestFormState extends State<_VisitRequestForm> {
     final visit = VisitModel(
       id: id,
       userId: widget.user.uid,
-      userName: widget.user.name,
+      userName: _nameCtrl.text.trim(),
       phone: widget.user.phone,
-      address: _addressCtrl.text.trim(),
+      deptName: _deptCtrl.text.trim(),
+      team: _teamCtrl.text.trim(),
       requestDate: DateTime.now(),
       preferredDate: _preferredDate,
       status: 'pending',
@@ -164,37 +184,67 @@ class _VisitRequestFormState extends State<_VisitRequestForm> {
             ),
             const SizedBox(height: 16),
             TextFormField(
-              controller: _addressCtrl,
+              controller: _nameCtrl,
               decoration: const InputDecoration(
-                labelText: '주소 *',
-                prefixIcon: Icon(Icons.home_outlined),
+                labelText: '이름 *',
+                prefixIcon: Icon(Icons.person_outline),
               ),
-              validator: (v) => (v == null || v.isEmpty) ? '주소를 입력해 주세요.' : null,
+              validator: (v) => (v == null || v.isEmpty) ? '이름을 입력해 주세요.' : null,
             ),
             const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.calendar_today),
-              title: Text(
-                _preferredDate == null
-                    ? '선호 날짜 선택 (선택사항)'
-                    : DateFormat('yyyy년 MM월 dd일', 'ko').format(_preferredDate!),
-              ),
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime.now().add(const Duration(days: 7)),
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 90)),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _deptCtrl,
+                    decoration: const InputDecoration(
+                      labelText: '부서 *',
+                      prefixIcon: Icon(Icons.groups_outlined),
+                    ),
+                    validator: (v) => (v == null || v.isEmpty) ? '부서를 입력해 주세요.' : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _teamCtrl,
+                    decoration: const InputDecoration(
+                      labelText: '팀 *',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                    validator: (v) => (v == null || v.isEmpty) ? '팀을 입력해 주세요.' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            StreamBuilder<List<VisitSlotModel>>(
+              stream: widget.service.streamVisitSlots(),
+              builder: (ctx, snap) {
+                final now = DateTime.now();
+                final slots = (snap.data ?? []).where((s) => s.dateTime.isAfter(now)).toList();
+                // 목록이 바뀌어 더는 유효하지 않은 선택값이면 초기화
+                if (_preferredDate != null && !slots.any((s) => s.dateTime == _preferredDate)) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() => _preferredDate = null);
+                  });
+                }
+                return DropdownButtonFormField<DateTime>(
+                  initialValue: _preferredDate,
+                  decoration: const InputDecoration(
+                    labelText: '선호 시간 선택 (선택사항)',
+                    prefixIcon: Icon(Icons.calendar_today),
+                  ),
+                  hint: Text(slots.isEmpty ? '열려 있는 시간대가 없습니다' : '선호 시간 선택'),
+                  items: slots
+                      .map((s) => DropdownMenuItem(
+                            value: s.dateTime,
+                            child: Text(DateFormat('MM/dd (E) HH:mm', 'ko').format(s.dateTime)),
+                          ))
+                      .toList(),
+                  onChanged: slots.isEmpty ? null : (v) => setState(() => _preferredDate = v),
                 );
-                if (picked != null) setState(() => _preferredDate = picked);
               },
-              trailing: _preferredDate != null
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => setState(() => _preferredDate = null),
-                    )
-                  : null,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -267,9 +317,9 @@ class _VisitCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.home_outlined, size: 16, color: AppColors.textSecondary),
+                const Icon(Icons.person_outline, size: 16, color: AppColors.textSecondary),
                 const SizedBox(width: 4),
-                Expanded(child: Text(visit.address)),
+                Expanded(child: Text('${visit.userName} · ${visit.deptName} · ${visit.team}')),
               ],
             ),
             if (visit.preferredDate != null) ...[
@@ -278,7 +328,7 @@ class _VisitCard extends StatelessWidget {
                 children: [
                   const Icon(Icons.calendar_today, size: 16, color: AppColors.textSecondary),
                   const SizedBox(width: 4),
-                  Text('선호일: ${DateFormat('yyyy년 MM월 dd일', 'ko').format(visit.preferredDate!)}'),
+                  Text('선호 시간: ${DateFormat('yyyy년 MM월 dd일 HH:mm', 'ko').format(visit.preferredDate!)}'),
                 ],
               ),
             ],
@@ -359,65 +409,157 @@ class _AdminVisitCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(visit.userName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: VisitStatus.color(visit.status).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    VisitStatus.label(visit.status),
-                    style: TextStyle(color: VisitStatus.color(visit.status), fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const Spacer(),
-                Text(DateFormat('MM/dd', 'ko').format(visit.requestDate),
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(visit.phone, style: const TextStyle(color: AppColors.textSecondary)),
-            Text(visit.address),
-            if (visit.preferredDate != null)
-              Text('선호일: ${DateFormat('yyyy/MM/dd', 'ko').format(visit.preferredDate!)}'),
-            if (visit.reason != null) Text(visit.reason!),
-            if (canConfirm) ...[
-              const Divider(height: 16),
-              Row(
-                children: [
-                  for (final status in ['confirmed', 'completed', 'cancelled'])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: TextButton(
-                        onPressed: visit.status == status
-                            ? null
-                            : () => _updateStatus(context, status),
-                        style: TextButton.styleFrom(
-                          foregroundColor: VisitStatus.color(status),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        ),
-                        child: Text(VisitStatus.label(status), style: const TextStyle(fontSize: 12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => showDialog(
+          context: context,
+          builder: (_) => _VisitDetailDialog(visit: visit, service: service, canConfirm: canConfirm),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Text(visit.userName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: VisitStatus.color(visit.status).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        VisitStatus.label(visit.status),
+                        style: TextStyle(color: VisitStatus.color(visit.status), fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
+              Text(DateFormat('MM/dd', 'ko').format(visit.requestDate),
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, color: AppColors.textSecondary),
             ],
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _VisitDetailDialog extends StatelessWidget {
+  final VisitModel visit;
+  final FirestoreService service;
+  final bool canConfirm;
+
+  const _VisitDetailDialog({required this.visit, required this.service, this.canConfirm = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          Expanded(child: Text(visit.userName)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: VisitStatus.color(visit.status).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              VisitStatus.label(visit.status),
+              style: TextStyle(color: VisitStatus.color(visit.status), fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _DetailRow(icon: Icons.phone_outlined, text: visit.phone),
+              const SizedBox(height: 8),
+              _DetailRow(icon: Icons.groups_outlined, text: '${visit.deptName} · ${visit.team}'),
+              const SizedBox(height: 8),
+              _DetailRow(
+                icon: Icons.calendar_today,
+                text: '신청일: ${DateFormat('yyyy년 MM월 dd일', 'ko').format(visit.requestDate)}',
+              ),
+              if (visit.preferredDate != null) ...[
+                const SizedBox(height: 8),
+                _DetailRow(
+                  icon: Icons.schedule,
+                  text: '선호 시간: ${DateFormat('yyyy년 MM월 dd일 HH:mm', 'ko').format(visit.preferredDate!)}',
+                ),
+              ],
+              if (visit.reason != null && visit.reason!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _DetailRow(icon: Icons.notes, text: visit.reason!),
+              ],
+              if (visit.adminNote != null && visit.adminNote!.isNotEmpty) ...[
+                const Divider(height: 24),
+                const Text('관리자 메모', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
+                const SizedBox(height: 4),
+                Text(visit.adminNote!),
+              ],
+              if (canConfirm) ...[
+                const Divider(height: 24),
+                Row(
+                  children: [
+                    for (final status in ['confirmed', 'completed', 'cancelled'])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: TextButton(
+                          onPressed: visit.status == status
+                              ? null
+                              : () => _updateStatus(context, status),
+                          style: TextButton.styleFrom(
+                            foregroundColor: VisitStatus.color(status),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          ),
+                          child: Text(VisitStatus.label(status), style: const TextStyle(fontSize: 12)),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('닫기')),
+      ],
     );
   }
 
   Future<void> _updateStatus(BuildContext context, String status) async {
     await service.updateVisitStatus(visit.id, status);
+    if (context.mounted) Navigator.pop(context);
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _DetailRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: AppColors.textSecondary),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text)),
+      ],
+    );
   }
 }

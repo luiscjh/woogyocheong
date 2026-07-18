@@ -3,7 +3,6 @@ import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/demo_data.dart';
 import '../services/firestore_service.dart' show demoMode;
-import '../utils/constants.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated }
 
@@ -18,6 +17,9 @@ class AuthProvider extends ChangeNotifier {
   UserModel? get currentUser => _currentUser;
   String? get error => _error;
 
+  // Google 최초 가입 시 소속(팀)을 아직 선택하지 않은 상태
+  bool get needsOnboarding => _currentUser != null && _currentUser!.department.isEmpty;
+
   bool get isAdmin => _currentUser?.isAdmin ?? false;
   bool get isExecutive => _currentUser?.isExecutive ?? false;
   bool get isMidLeader => _currentUser?.isMidLeader ?? false;
@@ -27,8 +29,6 @@ class AuthProvider extends ChangeNotifier {
   bool get canEditAttendance => isSmallLeader;
   // 출석/회비 팀 조회 권한: 중팀장 이상
   bool get canViewTeam => isMidLeader;
-  // 심방 확정 권한: 임원팀 + visit_confirm 권한 OR 관리자
-  bool get canConfirmVisit => _currentUser?.hasPermission(AppPermission.visitConfirm) ?? false;
   // 배너 관리 권한: 임원팀 이상
   bool get canManageBanners => isExecutive;
   // 회원 관리 권한: 소팀장 이상
@@ -75,35 +75,6 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       _currentUser = await _authService.signIn(email, password);
-      _status = AuthStatus.authenticated;
-      notifyListeners();
-      return true;
-    } on Exception catch (e) {
-      _error = _parseAuthError(e.toString());
-      _status = AuthStatus.unauthenticated;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> signUp({
-    required String email,
-    required String password,
-    required String name,
-    required String phone,
-    required String department,
-  }) async {
-    _status = AuthStatus.loading;
-    _error = null;
-    notifyListeners();
-    try {
-      _currentUser = await _authService.signUp(
-        email: email,
-        password: password,
-        name: name,
-        phone: phone,
-        department: department,
-      );
       _status = AuthStatus.authenticated;
       notifyListeners();
       return true;

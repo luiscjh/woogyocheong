@@ -25,13 +25,15 @@ class UserModel {
   });
 
   // 역할 계층 헬퍼
-  bool get isAdmin => role == UserRole.admin;
+  // 목사님은 관리자와 동일한 권한을 가짐
+  bool get isAdmin => role == UserRole.admin || role == UserRole.pastor;
   bool get isExecutive => role == UserRole.executive || isAdmin;
   bool get isMidLeader => role == UserRole.midLeader || isExecutive;
   bool get isSmallLeader => role == UserRole.smallLeader || isMidLeader;
 
   // 소속 중팀 (department 'A-1' → 'A')
-  String get midTeam => department.contains('-') ? department.split('-')[0] : '';
+  // 임원팀/새가족팀처럼 하이픈 없는 소속은 소팀 하위 구분이 없으므로 자기 자신이 곧 상위(중팀 수준) 단위가 됨
+  String get midTeam => department.contains('-') ? department.split('-')[0] : department;
 
   // 추가 권한 확인 (관리자는 항상 true)
   bool hasPermission(String perm) => isAdmin || permissions.contains(perm);

@@ -45,8 +45,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser!;
     final canEditToday = _isTodaySunday;
+    // 일반 회원(팀원)은 날짜를 바꿀 수 없고, 항상 오늘 하루만 체크 가능
+    final isPlainMember = !authProvider.isSmallLeader;
+    final today = DateTime.now();
+    final memberDate = DateTime(today.year, today.month, today.day);
 
-    // 중팀장 이상: 팀 전체 조회, 소팀장: 본인 소팀 수정, 팀원: 본인만
+    // 중팀장 이상: 팀 전체 조회, 소팀장: 본인 소팀 수정, 팀원: 본인만(오늘만)
     Widget body;
     if (authProvider.isExecutive) {
       body = AttendanceAdminList(date: _selectedDate, service: _service, canEdit: canEditToday, canDownload: true);
@@ -55,13 +59,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     } else if (authProvider.isSmallLeader) {
       body = AttendanceAdminList(date: _selectedDate, service: _service, canEdit: canEditToday, smallTeamFilter: user.department);
     } else {
-      body = _MemberAttendanceView(userId: user.uid, userName: user.name, date: _selectedDate, service: _service, canEdit: canEditToday);
+      body = _MemberAttendanceView(userId: user.uid, userName: user.name, date: memberDate, service: _service, canEdit: canEditToday);
     }
 
     return Scaffold(
       body: Column(
         children: [
-          _DateHeader(date: _selectedDate, onTap: _pickDate),
+          _DateHeader(
+            date: isPlainMember ? memberDate : _selectedDate,
+            onTap: isPlainMember ? null : _pickDate,
+          ),
           Expanded(child: body),
         ],
       ),
@@ -71,7 +78,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
 class _DateHeader extends StatelessWidget {
   final DateTime date;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _DateHeader({required this.date, required this.onTap});
 
@@ -88,11 +95,12 @@ class _DateHeader extends StatelessWidget {
               style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ),
-          TextButton.icon(
-            onPressed: onTap,
-            icon: const Icon(Icons.calendar_today, color: Colors.white70, size: 16),
-            label: const Text('날짜 변경', style: TextStyle(color: Colors.white70)),
-          ),
+          if (onTap != null)
+            TextButton.icon(
+              onPressed: onTap,
+              icon: const Icon(Icons.calendar_today, color: Colors.white70, size: 16),
+              label: const Text('날짜 변경', style: TextStyle(color: Colors.white70)),
+            ),
         ],
       ),
     );

@@ -3,6 +3,9 @@ import '../models/user_model.dart';
 import '../models/attendance_model.dart';
 import '../models/fee_model.dart';
 import '../models/visit_model.dart';
+import '../models/visit_slot_model.dart';
+import '../models/pastor_request_model.dart';
+import '../models/new_family_rotation_model.dart';
 import '../models/banner_model.dart';
 import '../utils/constants.dart';
 import 'demo_data.dart';
@@ -62,6 +65,12 @@ class FirestoreService {
     final docId = '${userId}_${AttendanceModel.dateKey(date)}';
     final model = AttendanceModel(id: docId, userId: userId, userName: userName, date: date, isPresent: isPresent, note: note);
     await _db.collection('attendance').doc(docId).set(model.toMap());
+  }
+
+  Stream<List<AttendanceModel>> streamAllAttendance() {
+    if (demoMode) return _demo.streamAllAttendance();
+    return _db.collection('attendance').snapshots()
+        .map((s) => s.docs.map(AttendanceModel.fromFirestore).toList());
   }
 
   Stream<List<AttendanceModel>> streamAttendanceByDate(DateTime date) {
@@ -152,6 +161,82 @@ class FirestoreService {
         .orderBy('requestDate', descending: true)
         .snapshots()
         .map((s) => s.docs.map(VisitModel.fromFirestore).toList());
+  }
+
+  // ── Visit Slots ───────────────────────────────────────────────────────
+  Stream<List<VisitSlotModel>> streamVisitSlots() {
+    if (demoMode) return _demo.streamVisitSlots();
+    return _db.collection('visitSlots')
+        .orderBy('dateTime')
+        .snapshots()
+        .map((s) => s.docs.map(VisitSlotModel.fromFirestore).toList());
+  }
+
+  Future<void> addVisitSlots(List<DateTime> dateTimes) async {
+    if (demoMode) { _demo.addVisitSlots(dateTimes); return; }
+    final batch = _db.batch();
+    for (final dt in dateTimes) {
+      batch.set(_db.collection('visitSlots').doc(), {'dateTime': Timestamp.fromDate(dt)});
+    }
+    await batch.commit();
+  }
+
+  Future<void> deleteVisitSlot(String id) async {
+    if (demoMode) { _demo.deleteVisitSlot(id); return; }
+    await _db.collection('visitSlots').doc(id).delete();
+  }
+
+  // ── Pastor Requests ─────────────────────────────────────────────────────
+  Stream<List<PastorRequestModel>> streamPastorRequests() {
+    if (demoMode) return _demo.streamPastorRequests();
+    return _db.collection('pastorRequests')
+        .orderBy('requestDate', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(PastorRequestModel.fromFirestore).toList());
+  }
+
+  Stream<List<PastorRequestModel>> streamUserPastorRequests(String userId) {
+    if (demoMode) return _demo.streamUserPastorRequests(userId);
+    return _db.collection('pastorRequests')
+        .where('userId', isEqualTo: userId)
+        .orderBy('requestDate', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(PastorRequestModel.fromFirestore).toList());
+  }
+
+  Future<void> requestPastorRole(PastorRequestModel request) async {
+    if (demoMode) { _demo.addPastorRequest(request); return; }
+    await _db.collection('pastorRequests').doc(request.id).set(request.toMap());
+  }
+
+  // 승인: 신청자 역할을 목사님으로 전환하고 신청 상태를 approved로 변경
+  Future<void> approvePastorRequest(String requestId, UserModel requester) async {
+    await updateUser(requester.copyWith(role: UserRole.pastor));
+    await _updatePastorRequestStatus(requestId, 'approved');
+  }
+
+  Future<void> rejectPastorRequest(String requestId) async {
+    await _updatePastorRequestStatus(requestId, 'rejected');
+  }
+
+  Future<void> _updatePastorRequestStatus(String id, String status) async {
+    if (demoMode) { _demo.updatePastorRequestStatus(id, status); return; }
+    await _db.collection('pastorRequests').doc(id).update({'status': status});
+  }
+
+  // ── New Family Rotation (주차 1~3별 고정 담당 리더) ──────────────────────
+  Stream<List<NewFamilyRotationModel>> streamNewFamilyRotations() {
+    if (demoMode) return _demo.streamNewFamilyRotations();
+    return _db.collection('newFamilyRotations')
+        .orderBy('weekNumber')
+        .snapshots()
+        .map((s) => s.docs.map(NewFamilyRotationModel.fromFirestore).toList());
+  }
+
+  // weekNumber 기준으로 upsert (이미 등록된 주차면 담당 리더를 교체)
+  Future<void> setNewFamilyRotation(NewFamilyRotationModel rotation) async {
+    if (demoMode) { _demo.setNewFamilyRotation(rotation); return; }
+    await _db.collection('newFamilyRotations').doc('week${rotation.weekNumber}').set(rotation.toMap());
   }
 
   // ── Banners ───────────────────────────────────────────────────────────

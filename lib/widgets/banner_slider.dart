@@ -67,46 +67,34 @@ class _BannerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 배너 제목은 관리자가 배너를 식별하기 위한 용도로만 쓰이고, 실제 배너 화면에는 노출하지 않음
+    final hasDescription = banner.description != null && banner.description!.isNotEmpty;
     return Stack(
       fit: StackFit.expand,
       children: [
         AppImage(imageUrl: banner.imageUrl, fit: BoxFit.cover),
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [Colors.black.withValues(alpha: 0.6), Colors.transparent],
+        if (hasDescription)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black.withValues(alpha: 0.6), Colors.transparent],
+                ),
+              ),
+              child: Text(
+                banner.description!,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  banner.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (banner.description != null && banner.description!.isNotEmpty)
-                  Text(
-                    banner.description!,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
-            ),
           ),
-        ),
       ],
     );
   }
