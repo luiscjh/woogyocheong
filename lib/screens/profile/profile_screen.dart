@@ -63,12 +63,37 @@ class ProfileScreen extends StatelessWidget {
                 _InfoItem(icon: Icons.phone_outlined, label: '전화번호', value: user.phone.isEmpty ? '-' : user.phone),
                 _InfoItem(icon: Icons.group_outlined, label: '부서/그룹', value: user.department.isEmpty ? '-' : user.department),
                 _InfoItem(
+                  icon: Icons.cake_outlined,
+                  label: '생년월일',
+                  value: user.birthDate != null ? DateFormat('yyyy년 MM월 dd일', 'ko').format(user.birthDate!) : '-',
+                ),
+                _InfoItem(
+                  icon: Icons.groups_2_outlined,
+                  label: '기수',
+                  value: user.cohort != null ? '${user.cohort}기' : '-',
+                ),
+                _InfoItem(
                   icon: Icons.calendar_today_outlined,
                   label: '가입일',
                   value: DateFormat('yyyy년 MM월 dd일', 'ko').format(user.joinDate),
                 ),
               ],
             ),
+            if (context.watch<AuthProvider>().isCohortRestricted) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '현재 허용된 기수 범위가 아니라 조회만 가능한 상태입니다. 궁금한 점은 관리자에게 문의해 주세요.',
+                  style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
             if (user.email == _testAccountEmail) ...[
               const SizedBox(height: 20),
               _TestRoleSwitcherSection(user: user),
@@ -331,10 +356,13 @@ class _RoleOption {
   final String label;
   final String role;
   final String department;
+  // 사역팀(콘텐츠팀 등) 소속 여부 — department와 독립된 별도 축이므로 함께 관리
+  final String ministryTeam;
+  final bool isMinistryLead;
 
-  const _RoleOption(this.label, this.role, this.department);
+  const _RoleOption(this.label, this.role, this.department, {this.ministryTeam = '', this.isMinistryLead = false});
 
-  String get key => '$role|$department';
+  String get key => '$role|$department|$ministryTeam|$isMinistryLead';
 }
 
 const _testRoleOptions = [
@@ -347,6 +375,9 @@ const _testRoleOptions = [
   _RoleOption('새가족', UserRole.member, AppTeams.newFamilyTeam),
   _RoleOption('새가족팀 리더', UserRole.smallLeader, AppTeams.newFamilyTeam),
   _RoleOption('새가족팀 팀장', UserRole.midLeader, AppTeams.newFamilyTeam),
+  // 사역팀은 department와 독립된 축이라 role=팀원 + 실제 소속팀(A-1)을 유지한 채 ministryTeam만 부여
+  _RoleOption('콘텐츠팀 팀원', UserRole.member, 'A-1', ministryTeam: AppTeams.contentTeam),
+  _RoleOption('콘텐츠팀 팀장', UserRole.member, 'A-1', ministryTeam: AppTeams.contentTeam, isMinistryLead: true),
 ];
 
 // 테스트 전용 계정(testing@church.com)이 관리자~팀원 및 새가족 관련 역할을 즉시 오갈 수 있는 섹션
@@ -357,10 +388,14 @@ class _TestRoleSwitcherSection extends StatelessWidget {
 
   _RoleOption get _currentOption {
     return _testRoleOptions.firstWhere(
-      (o) => o.role == user.role && o.department == user.department,
+      (o) => o.role == user.role && o.department == user.department &&
+          o.ministryTeam == user.ministryTeam && o.isMinistryLead == user.isMinistryLead,
       orElse: () => _testRoleOptions.firstWhere(
-        (o) => o.role == user.role,
-        orElse: () => _testRoleOptions.first,
+        (o) => o.role == user.role && o.department == user.department,
+        orElse: () => _testRoleOptions.firstWhere(
+          (o) => o.role == user.role,
+          orElse: () => _testRoleOptions.first,
+        ),
       ),
     );
   }
@@ -402,10 +437,25 @@ class _TestRoleSwitcherSection extends StatelessWidget {
   Future<void> _switchRole(BuildContext context, String? key) async {
     if (key == null) return;
     final option = _testRoleOptions.firstWhere((o) => o.key == key);
-    if (option.role == user.role && option.department == user.department) return;
+    if (option.role == user.role && option.department == user.department &&
+        option.ministryTeam == user.ministryTeam && option.isMinistryLead == user.isMinistryLead) {
+      return;
+    }
 
     final service = FirestoreService();
-    final updated = user.copyWith(role: option.role, department: option.department);
+    // AuthProvider에 캐시된 user는 다른 화면(예: 회원 관리에서 관리자가 본인
+    // 계정에 직접 부여한 배너 관리 권한 공유)에서 바뀐 최신 값을 반영하지
+    // 못할 수 있으므로, 역할 전환 시 최신 레코드를 다시 조회해 그 값을 기반으로 덮어씀
+    final latest = await service.getUser(user.uid) ?? user;
+    final updated = latest.copyWith(
+      role: option.role,
+      department: option.department,
+      ministryTeam: option.ministryTeam,
+      isMinistryLead: option.isMinistryLead,
+      // 콘텐츠팀 팀원 상태를 벗어나면 위임받았던 배너 관리 권한도 함께 초기화
+      bannerAccessGranted:
+          option.ministryTeam == AppTeams.contentTeam && !option.isMinistryLead ? latest.bannerAccessGranted : false,
+    );
     await service.updateUser(updated);
     if (!context.mounted) return;
     context.read<AuthProvider>().setCurrentUser(updated);

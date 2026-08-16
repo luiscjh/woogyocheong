@@ -222,6 +222,17 @@ class _RequestCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ] else ...[
+              const Divider(height: 20),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _delete(context),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('기록 삭제'),
+                ),
+              ),
             ],
           ],
         ),
@@ -251,5 +262,29 @@ class _RequestCard extends StatelessWidget {
 
   Future<void> _reject(BuildContext context) async {
     await service.rejectPastorRequest(request.id);
+  }
+
+  Future<void> _delete(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('기록 삭제'),
+        content: Text('${request.userName}님의 ${_statusLabel(request.status)} 신청 기록을 삭제하시겠습니까?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await service.deletePastorRequest(request.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('신청 기록을 삭제했습니다.'), backgroundColor: AppColors.success),
+    );
   }
 }

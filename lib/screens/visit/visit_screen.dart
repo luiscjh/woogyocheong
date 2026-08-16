@@ -21,7 +21,7 @@ class VisitScreen extends StatelessWidget {
     if (user.role == UserRole.pastor) {
       return _AdminVisitView(service: service, canConfirm: true);
     }
-    return _MemberVisitView(service: service, user: user);
+    return _MemberVisitView(service: service, user: user, isCohortRestricted: authProvider.isCohortRestricted);
   }
 }
 
@@ -30,8 +30,9 @@ class VisitScreen extends StatelessWidget {
 class _MemberVisitView extends StatelessWidget {
   final FirestoreService service;
   final dynamic user;
+  final bool isCohortRestricted;
 
-  const _MemberVisitView({required this.service, required this.user});
+  const _MemberVisitView({required this.service, required this.user, required this.isCohortRestricted});
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +43,23 @@ class _MemberVisitView extends StatelessWidget {
           final visits = snap.data ?? [];
           return CustomScrollView(
             slivers: [
+              if (isCohortRestricted)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        '허용된 기수 범위가 아니라 심방 신청 없이 조회만 가능합니다.',
+                        style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ),
               SliverPadding(
                 padding: const EdgeInsets.all(16),
                 sliver: SliverList(
@@ -68,13 +86,15 @@ class _MemberVisitView extends StatelessWidget {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showRequestDialog(context),
-        icon: const Icon(Icons.add),
-        label: const Text('심방 신청'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-      ),
+      floatingActionButton: isCohortRestricted
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _showRequestDialog(context),
+              icon: const Icon(Icons.add),
+              label: const Text('심방 신청'),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
     );
   }
 

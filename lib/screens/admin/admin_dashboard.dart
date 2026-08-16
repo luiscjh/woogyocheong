@@ -8,7 +8,11 @@ import 'pastor_request_management.dart';
 import 'new_family_management.dart';
 import 'new_family_rotation_management.dart';
 import 'small_leader_status_screen.dart';
+import '../attendance/attendance_management_screen.dart';
+import '../fee/fee_management_screen.dart';
 import '../visit/visit_slot_management.dart';
+import 'ministry_meeting_screen.dart';
+import 'cohort_settings_screen.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
@@ -39,34 +43,99 @@ class AdminDashboard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _AdminMenuCard(
-            icon: Icons.people_outline,
-            title: '회원 관리',
-            subtitle: user.department == AppTeams.newFamilyTeam
-                ? (user.role == UserRole.smallLeader ? '내 담당 주차 새가족 확인' : '새가족팀 회원 관리')
-                : auth.isExecutive
-                    ? '전체 회원 관리'
-                    : auth.isMidLeader
-                        ? '${user.midTeam}중팀 회원 관리'
-                        : '${user.department}팀 회원 관리',
-            color: AppColors.primary,
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MemberManagementScreen())),
-          ),
-          if (auth.isMidLeader) ...[
+          // 회원 정보 수정(이메일·소속팀 변경 등) 권한: 관리자·임원팀(및 그 하위
+          // 소팀장·중팀장 계층)만 보유. 콘텐츠팀 팀장은 수정 권한 없이 조회만 가능
+          if (auth.isSmallLeader) ...[
+            _AdminMenuCard(
+              icon: Icons.people_outline,
+              title: '회원 관리',
+              subtitle: user.department == AppTeams.newFamilyTeam
+                  ? (user.role == UserRole.smallLeader ? '내 담당 주차 새가족 확인' : '새가족팀 회원 관리')
+                  : auth.isExecutive
+                      ? '전체 회원 관리'
+                      : auth.isMidLeader
+                          ? '${user.midTeam}중팀 회원 관리'
+                          : '${user.department}팀 회원 관리',
+              color: AppColors.primary,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MemberManagementScreen())),
+            ),
+          ] else if (auth.isMinistryLead) ...[
+            _AdminMenuCard(
+              icon: Icons.people_outline,
+              title: '회원 조회',
+              subtitle: '${user.ministryTeam} 팀원 명단 조회',
+              color: AppColors.primary,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MemberManagementScreen(readOnly: true))),
+            ),
+          ],
+          if (user.role != UserRole.pastor && !auth.isSmallLeader && auth.isMinistryLead) ...[
+            // 사역팀장(예: 콘텐츠팀)은 실제 중팀장 역할을 수행하지 않으므로
+            // 출석 관리 대신 회의 일정 관리를 제공
+            const SizedBox(height: 12),
+            _AdminMenuCard(
+              icon: Icons.event_note_outlined,
+              title: '회의 일정 관리',
+              subtitle: '${user.ministryTeam} 회의 일정 관리',
+              color: Colors.blue,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MinistryMeetingScreen())),
+            ),
+          ] else if (user.role != UserRole.pastor && auth.isSmallLeader) ...[
+            const SizedBox(height: 12),
+            _AdminMenuCard(
+              icon: Icons.check_circle_outline,
+              title: '출석 관리',
+              subtitle: auth.isExecutive
+                  ? '전체 출석 관리'
+                  : auth.isMidLeader
+                      ? '${user.midTeam}중팀 출석 현황'
+                      : '${user.department}팀 출석 관리',
+              color: Colors.blue,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendanceManagementScreen())),
+            ),
+          ],
+          // 사역팀(콘텐츠팀) 팀장이 아닌 일반 팀원은 회의 일정을 조회만 할 수 있음
+          if (user.role != UserRole.pastor && auth.inContentTeam && !auth.isMinistryLead) ...[
+            const SizedBox(height: 12),
+            _AdminMenuCard(
+              icon: Icons.event_note_outlined,
+              title: '회의 일정',
+              subtitle: '${user.ministryTeam} 회의 일정 조회',
+              color: Colors.blue,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MinistryMeetingScreen(readOnly: true))),
+            ),
+          ],
+          // 회비 관리: 새가족팀은 팀장이 전담하고, 리더에게는 이 권한을 부여하지 않음
+          if (user.role != UserRole.pastor && auth.isSmallLeader &&
+              !(user.department == AppTeams.newFamilyTeam && user.role == UserRole.smallLeader)) ...[
+            const SizedBox(height: 12),
+            _AdminMenuCard(
+              icon: Icons.payments_outlined,
+              title: '회비 관리',
+              subtitle: user.department == AppTeams.newFamilyTeam
+                  ? '새가족팀 회비 관리'
+                  : auth.isExecutive
+                      ? '전체 회비 관리'
+                      : auth.isMidLeader
+                          ? '${user.midTeam}중팀 회비 현황'
+                          : '${user.department}팀 회비 관리',
+              color: Colors.green,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FeeManagementScreen())),
+            ),
+          ],
+          if (user.role == UserRole.midLeader) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.badge_outlined,
               title: '소팀장 현황',
-              subtitle: auth.isExecutive
-                  ? '전체 소팀장 현황'
-                  : user.department == AppTeams.newFamilyTeam
-                      ? '새가족팀 리더 현황'
-                      : '${user.midTeam}중팀 소팀장 현황',
+              subtitle: user.department == AppTeams.newFamilyTeam
+                  ? '새가족팀 리더 현황'
+                  : '${user.midTeam}중팀 소팀장 현황',
               color: Colors.deepPurple,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmallLeaderStatusScreen())),
             ),
           ],
-          if (auth.isExecutive || (user.department == AppTeams.newFamilyTeam && auth.isMidLeader)) ...[
+          // 새가족 관리(소팀 배정)는 새가족팀장 전용 — 임원팀은 제외
+          if (user.department == AppTeams.newFamilyTeam && auth.isMidLeader) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.diversity_3_outlined,
@@ -76,7 +145,7 @@ class AdminDashboard extends StatelessWidget {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewFamilyManagementScreen())),
             ),
           ],
-          if (auth.isAdmin || (user.department == AppTeams.newFamilyTeam && auth.isMidLeader)) ...[
+          if (user.department == AppTeams.newFamilyTeam && auth.isMidLeader) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.event_repeat_outlined,
@@ -86,7 +155,7 @@ class AdminDashboard extends StatelessWidget {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewFamilyRotationManagementScreen())),
             ),
           ],
-          if (auth.canManageBanners) ...[
+          if (auth.canManageBanners && user.role != UserRole.pastor) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.image_outlined,
@@ -95,6 +164,8 @@ class AdminDashboard extends StatelessWidget {
               color: Colors.orange,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BannerManagementScreen())),
             ),
+          ],
+          if (user.role == UserRole.pastor) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.schedule_outlined,
@@ -112,6 +183,16 @@ class AdminDashboard extends StatelessWidget {
               subtitle: '회원의 목사 권한 신청 승인/거절',
               color: Colors.brown,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PastorRequestManagementScreen())),
+            ),
+          ],
+          if (auth.isAdmin) ...[
+            const SizedBox(height: 12),
+            _AdminMenuCard(
+              icon: Icons.groups_2_outlined,
+              title: '기수 제한 설정',
+              subtitle: '허용 기수 범위를 벗어난 회원 조회 전용 전환',
+              color: Colors.indigo,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CohortSettingsScreen())),
             ),
           ],
         ],

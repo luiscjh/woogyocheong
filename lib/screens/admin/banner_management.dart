@@ -2,9 +2,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
 import '../../models/banner_model.dart';
+import '../../models/user_model.dart';
 import '../../utils/constants.dart';
 import '../../widgets/app_image.dart';
 
@@ -21,8 +24,22 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
     return Scaffold(
-      appBar: AppBar(title: const Text('배너 관리')),
+      appBar: AppBar(
+        title: const Text('배너 관리'),
+        actions: [
+          if (auth.canShareBannerAccess)
+            IconButton(
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              tooltip: '권한 공유 대상 지정',
+              onPressed: () => showDialog(
+                context: context,
+                builder: (_) => _BannerAccessShareDialog(service: _firestore),
+              ),
+            ),
+        ],
+      ),
       body: StreamBuilder<List<BannerModel>>(
         stream: _firestore.streamAllBanners(),
         builder: (ctx, snap) {
@@ -130,6 +147,71 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
         banner: banner,
         nextOrder: 999,
       ),
+    );
+  }
+}
+
+// 콘텐츠팀 팀장(또는 관리자)이 배너 관리 권한을 위임할 대상을 직접 지정하는 다이얼로그.
+// 사역팀장은 이미 고유 권한을 보유하므로 목록에서 제외하고, 콘텐츠팀 일반 팀원만 대상으로 함
+class _BannerAccessShareDialog extends StatelessWidget {
+  final FirestoreService service;
+
+  const _BannerAccessShareDialog({required this.service});
+
+  Future<void> _toggle(BuildContext context, UserModel member, bool granted) async {
+    final updated = member.copyWith(bannerAccessGranted: granted);
+    await service.updateUser(updated);
+    if (!context.mounted) return;
+    // 위임 대상이 마침 현재 로그인된 계정 본인이라면(테스트 계정 등) 세션에도 즉시 반영
+    if (context.read<AuthProvider>().currentUser?.uid == updated.uid) {
+      context.read<AuthProvider>().setCurrentUser(updated);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('배너 관리 권한 공유 대상 지정'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: StreamBuilder<List<UserModel>>(
+          stream: service.streamAllMembers(),
+          builder: (ctx, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const SizedBox(height: 80, child: Center(child: CircularProgressIndicator()));
+            }
+            final members = (snap.data ?? [])
+                .where((m) => m.ministryTeam == AppTeams.contentTeam && !m.isMinistryLead)
+                .toList();
+            if (members.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  '공유할 수 있는 콘텐츠팀 팀원이 없습니다.\n'
+                  '회원 관리에서 콘텐츠팀 팀원을 먼저 추가해 주세요.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              );
+            }
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: members
+                    .map((m) => SwitchListTile(
+                          title: Text(m.name),
+                          subtitle: Text(m.email),
+                          value: m.bannerAccessGranted,
+                          onChanged: (v) => _toggle(context, m, v),
+                        ))
+                    .toList(),
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('닫기')),
+      ],
     );
   }
 }

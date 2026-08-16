@@ -13,6 +13,8 @@ import '../fee/fee_screen.dart';
 import '../visit/visit_screen.dart';
 import '../admin/admin_dashboard.dart';
 import '../profile/profile_screen.dart';
+import '../notifications/notification_screen.dart';
+import '../../models/notification_model.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,21 +31,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.read<AuthProvider>();
-    final canManage = authProvider.canManageMembers;
+    // watch를 사용해야 역할 전환 등으로 권한이 바뀔 때 관리 탭 노출 여부가
+    // 즉시 갱신됨 (read를 쓰면 이미 그려진 화면은 다음 setState 전까지 갱신되지 않음)
+    final authProvider = context.watch<AuthProvider>();
+    final canManage = authProvider.canAccessAdminTab;
+    // 목사님은 소팀 소속 회원이 아니므로 개인 출석 체크/회비 납부 탭이 필요 없음
+    final isPastor = authProvider.currentUser?.role == UserRole.pastor;
 
     final pages = [
-      _HomeTab(firestoreService: _firestoreService, onNavigate: _navigateTo),
-      const AttendanceScreen(),
-      const FeeScreen(),
+      _HomeTab(firestoreService: _firestoreService, onNavigate: _navigateTo, isPastor: isPastor),
+      if (!isPastor) const AttendanceScreen(),
+      if (!isPastor) const FeeScreen(),
       const VisitScreen(),
       if (canManage) const AdminDashboard(),
     ];
 
     final destinations = [
       const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: '홈'),
-      const NavigationDestination(icon: Icon(Icons.check_circle_outline), selectedIcon: Icon(Icons.check_circle), label: '출석'),
-      const NavigationDestination(icon: Icon(Icons.payments_outlined), selectedIcon: Icon(Icons.payments), label: '회비'),
+      if (!isPastor)
+        const NavigationDestination(icon: Icon(Icons.check_circle_outline), selectedIcon: Icon(Icons.check_circle), label: '출석'),
+      if (!isPastor)
+        const NavigationDestination(icon: Icon(Icons.payments_outlined), selectedIcon: Icon(Icons.payments), label: '회비'),
       const NavigationDestination(icon: Icon(Icons.favorite_border), selectedIcon: Icon(Icons.favorite), label: '심방'),
       if (canManage)
         const NavigationDestination(icon: Icon(Icons.admin_panel_settings_outlined), selectedIcon: Icon(Icons.admin_panel_settings), label: '관리'),
@@ -53,6 +61,23 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text(AppStrings.appName),
         actions: [
+          StreamBuilder<List<NotificationModel>>(
+            stream: _firestoreService.streamUserNotifications(authProvider.currentUser?.uid ?? ''),
+            builder: (ctx, snap) {
+              final unreadCount = (snap.data ?? []).where((n) => !n.isRead).length;
+              return IconButton(
+                icon: Badge(
+                  isLabelVisible: unreadCount > 0,
+                  label: Text('$unreadCount'),
+                  child: const Icon(Icons.notifications_outlined),
+                ),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationScreen()),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             onPressed: () => Navigator.push(
@@ -62,21 +87,26 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: IndexedStack(index: _selectedIndex, children: pages),
+      body: IndexedStack(index: _effectiveIndex(pages.length), children: pages),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
+        selectedIndex: _effectiveIndex(pages.length),
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),
         destinations: destinations,
       ),
     );
   }
+
+  // 관리 탭이 사라져 canManage가 false가 되는 등 탭 개수가 줄어든 경우,
+  // 이전에 선택돼 있던 인덱스가 범위를 벗어나지 않도록 방어
+  int _effectiveIndex(int tabCount) => _selectedIndex < tabCount ? _selectedIndex : 0;
 }
 
 class _HomeTab extends StatelessWidget {
   final FirestoreService firestoreService;
   final void Function(int) onNavigate;
+  final bool isPastor;
 
-  const _HomeTab({required this.firestoreService, required this.onNavigate});
+  const _HomeTab({required this.firestoreService, required this.onNavigate, required this.isPastor});
 
   @override
   Widget build(BuildContext context) {
@@ -133,23 +163,27 @@ class _HomeTab extends StatelessWidget {
               crossAxisSpacing: 12,
               childAspectRatio: 1.3,
               children: [
-                _FeatureCard(
-                  icon: Icons.check_circle_outline,
-                  label: '출석체크',
-                  color: Colors.blue,
-                  onTap: () => onNavigate(1),
-                ),
-                _FeatureCard(
-                  icon: Icons.payments_outlined,
-                  label: '회비납부',
-                  color: Colors.green,
-                  onTap: () => onNavigate(2),
-                ),
+                if (!isPastor) ...[
+                  _FeatureCard(
+                    icon: Icons.check_circle_outline,
+                    label: '출석체크',
+                    color: Colors.blue,
+                    onTap: () => onNavigate(1),
+                  ),
+                  _FeatureCard(
+                    icon: Icons.payments_outlined,
+                    label: '회비납부',
+                    color: Colors.green,
+                    onTap: () => onNavigate(2),
+                  ),
+                ],
                 _FeatureCard(
                   icon: Icons.favorite_border,
-                  label: '심방신청',
+                  // 목사님은 심방을 신청하는 입장이 아니라 확인/확정하는 입장이므로 라벨을 구분
+                  label: isPastor ? '심방 현황' : '심방신청',
+                  // 목사님은 출석/회비 탭이 없어 심방 탭의 실제 인덱스가 앞당겨짐
                   color: Colors.red,
-                  onTap: () => onNavigate(3),
+                  onTap: () => onNavigate(isPastor ? 1 : 3),
                 ),
                 _FeatureCard(
                   icon: Icons.person_outline,

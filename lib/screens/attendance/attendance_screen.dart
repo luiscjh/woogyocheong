@@ -5,82 +5,49 @@ import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/attendance_model.dart';
 import '../../utils/constants.dart';
-import 'attendance_admin_screen.dart';
 
-class AttendanceScreen extends StatefulWidget {
+// 홈 하단 탭의 '출석' 화면: 역할과 무관하게 본인의 출석 여부만 확인/체크할 수 있음.
+// 팀 전체 출석 관리는 관리 탭의 '출석 관리'(AttendanceManagementScreen)에서 별도로 제공됨.
+class AttendanceScreen extends StatelessWidget {
   const AttendanceScreen({super.key});
 
-  @override
-  State<AttendanceScreen> createState() => _AttendanceScreenState();
-}
-
-class _AttendanceScreenState extends State<AttendanceScreen> {
-  final _service = FirestoreService();
-  DateTime _selectedDate = _nearestSunday();
-
-  static DateTime _nearestSunday() {
-    final now = DateTime.now();
-    final daysUntilSunday = (7 - now.weekday) % 7;
-    return now.weekday == 7
-        ? DateTime(now.year, now.month, now.day)
-        : DateTime(now.year, now.month, now.day - (7 - daysUntilSunday));
-  }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      selectableDayPredicate: (d) => d.weekday == DateTime.sunday,
-    );
-    if (picked != null) setState(() => _selectedDate = picked);
-  }
-
   // 출석체크(마킹)는 무조건 일요일 당일에만 가능 (조회는 언제든 가능)
-  bool get _isTodaySunday => DateTime.now().weekday == DateTime.sunday;
+  static bool get _isTodaySunday => DateTime.now().weekday == DateTime.sunday;
 
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser!;
-    final canEditToday = _isTodaySunday;
-    // 일반 회원(팀원)은 날짜를 바꿀 수 없고, 항상 오늘 하루만 체크 가능
-    final isPlainMember = !authProvider.isSmallLeader;
+    final restricted = authProvider.isCohortRestricted;
+    final service = FirestoreService();
     final today = DateTime.now();
     final memberDate = DateTime(today.year, today.month, today.day);
-
-    // 중팀장 이상: 팀 전체 조회, 소팀장: 본인 소팀 수정, 팀원: 본인만(오늘만)
-    Widget body;
-    if (authProvider.isExecutive) {
-      body = AttendanceAdminList(date: _selectedDate, service: _service, canEdit: canEditToday, canDownload: true);
-    } else if (authProvider.isMidLeader) {
-      body = AttendanceAdminList(date: _selectedDate, service: _service, canEdit: false, midTeamFilter: user.midTeam);
-    } else if (authProvider.isSmallLeader) {
-      body = AttendanceAdminList(date: _selectedDate, service: _service, canEdit: canEditToday, smallTeamFilter: user.department);
-    } else {
-      body = _MemberAttendanceView(userId: user.uid, userName: user.name, date: memberDate, service: _service, canEdit: canEditToday);
-    }
 
     return Scaffold(
       body: Column(
         children: [
-          _DateHeader(
-            date: isPlainMember ? memberDate : _selectedDate,
-            onTap: isPlainMember ? null : _pickDate,
+          AttendanceDateHeader(date: memberDate, onTap: null),
+          Expanded(
+            child: _MemberAttendanceView(
+              userId: user.uid,
+              userName: user.name,
+              date: memberDate,
+              service: service,
+              canEdit: _isTodaySunday && !restricted,
+              isCohortRestricted: restricted,
+            ),
           ),
-          Expanded(child: body),
         ],
       ),
     );
   }
 }
 
-class _DateHeader extends StatelessWidget {
+class AttendanceDateHeader extends StatelessWidget {
   final DateTime date;
   final VoidCallback? onTap;
 
-  const _DateHeader({required this.date, required this.onTap});
+  const AttendanceDateHeader({super.key, required this.date, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +80,7 @@ class _MemberAttendanceView extends StatelessWidget {
   final DateTime date;
   final FirestoreService service;
   final bool canEdit;
+  final bool isCohortRestricted;
 
   const _MemberAttendanceView({
     required this.userId,
@@ -120,6 +88,7 @@ class _MemberAttendanceView extends StatelessWidget {
     required this.date,
     required this.service,
     required this.canEdit,
+    required this.isCohortRestricted,
   });
 
   @override
@@ -194,9 +163,11 @@ class _MemberAttendanceView extends StatelessWidget {
                     color: AppColors.warning.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    '출석체크는 주일(일요일)에만 가능합니다.',
-                    style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
+                  child: Text(
+                    isCohortRestricted
+                        ? '허용된 기수 범위가 아니라 조회만 가능합니다.'
+                        : '출석체크는 주일(일요일)에만 가능합니다.',
+                    style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
                   ),
                 ),
               const SizedBox(height: 40),

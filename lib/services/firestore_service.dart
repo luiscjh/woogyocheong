@@ -7,6 +7,9 @@ import '../models/visit_slot_model.dart';
 import '../models/pastor_request_model.dart';
 import '../models/new_family_rotation_model.dart';
 import '../models/banner_model.dart';
+import '../models/ministry_meeting_model.dart';
+import '../models/notification_model.dart';
+import '../models/app_settings_model.dart';
 import '../utils/constants.dart';
 import 'demo_data.dart';
 
@@ -32,7 +35,17 @@ class FirestoreService {
 
   Future<void> updateUser(UserModel user) async {
     if (demoMode) { _demo.updateUser(user); return; }
+    final existing = await _db.collection('users').doc(user.uid).get();
+    final oldDept = existing.data()?['department'] as String? ?? '';
     await _db.collection('users').doc(user.uid).update(user.toMap());
+    if (oldDept.isNotEmpty && oldDept != user.department && user.department.isNotEmpty) {
+      await _addNotification(
+        userId: user.uid,
+        title: '소속팀 변경',
+        body: '소속팀이 ${AppTeams.deptLabel(user.department)}(으)로 변경되었습니다.',
+        type: 'teamAssignment',
+      );
+    }
   }
 
   Future<void> deleteUser(String uid) async {
@@ -141,9 +154,20 @@ class FirestoreService {
 
   Future<void> updateVisitStatus(String visitId, String status, {String? adminNote}) async {
     if (demoMode) { _demo.updateVisitStatus(visitId, status, adminNote: adminNote); return; }
+    final doc = await _db.collection('visits').doc(visitId).get();
+    final oldStatus = doc.data()?['status'] as String? ?? '';
+    final visitUserId = doc.data()?['userId'] as String? ?? '';
     final update = <String, dynamic>{'status': status};
     if (adminNote != null) update['adminNote'] = adminNote;
     await _db.collection('visits').doc(visitId).update(update);
+    if (visitUserId.isNotEmpty && oldStatus != status) {
+      await _addNotification(
+        userId: visitUserId,
+        title: '심방 신청 상태 변경',
+        body: "심방 신청이 '${VisitStatus.label(status)}' 상태로 변경되었습니다.",
+        type: 'visit',
+      );
+    }
   }
 
   Stream<List<VisitModel>> streamAllVisits() {
@@ -221,7 +245,23 @@ class FirestoreService {
 
   Future<void> _updatePastorRequestStatus(String id, String status) async {
     if (demoMode) { _demo.updatePastorRequestStatus(id, status); return; }
+    final doc = await _db.collection('pastorRequests').doc(id).get();
+    final requesterId = doc.data()?['userId'] as String? ?? '';
     await _db.collection('pastorRequests').doc(id).update({'status': status});
+    if (requesterId.isNotEmpty) {
+      await _addNotification(
+        userId: requesterId,
+        title: '목사 권한 신청 결과',
+        body: status == 'approved' ? '목사 권한 신청이 승인되었습니다.' : '목사 권한 신청이 거절되었습니다.',
+        type: 'pastorRequest',
+      );
+    }
+  }
+
+  // 승인/거절 등 처리가 끝난 신청 기록만 관리자가 삭제(정리) 가능
+  Future<void> deletePastorRequest(String id) async {
+    if (demoMode) { _demo.deletePastorRequest(id); return; }
+    await _db.collection('pastorRequests').doc(id).delete();
   }
 
   // ── New Family Rotation (주차 1~3별 고정 담당 리더) ──────────────────────
@@ -237,6 +277,94 @@ class FirestoreService {
   Future<void> setNewFamilyRotation(NewFamilyRotationModel rotation) async {
     if (demoMode) { _demo.setNewFamilyRotation(rotation); return; }
     await _db.collection('newFamilyRotations').doc('week${rotation.weekNumber}').set(rotation.toMap());
+    await _addNotification(
+      userId: rotation.leaderId,
+      title: '새가족 로테이션 배정',
+      body: '${rotation.weekNumber}주차 새가족 로테이션 담당으로 배정되었습니다.',
+      type: 'newFamilyRotation',
+    );
+  }
+
+  // ── Ministry Meetings (사역팀 회의 일정) ─────────────────────────────────
+  Stream<List<MinistryMeetingModel>> streamMinistryMeetings(String ministryTeam) {
+    if (demoMode) return _demo.streamMinistryMeetings(ministryTeam);
+    return _db.collection('ministryMeetings')
+        .where('ministryTeam', isEqualTo: ministryTeam)
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(MinistryMeetingModel.fromFirestore).toList());
+  }
+
+  Future<void> addMinistryMeeting(MinistryMeetingModel meeting) async {
+    if (demoMode) { _demo.addMinistryMeeting(meeting); return; }
+    await _db.collection('ministryMeetings').doc(meeting.id).set(meeting.toMap());
+  }
+
+  Future<void> updateMinistryMeeting(MinistryMeetingModel meeting) async {
+    if (demoMode) { _demo.updateMinistryMeeting(meeting); return; }
+    await _db.collection('ministryMeetings').doc(meeting.id).update(meeting.toMap());
+  }
+
+  Future<void> deleteMinistryMeeting(String id) async {
+    if (demoMode) { _demo.deleteMinistryMeeting(id); return; }
+    await _db.collection('ministryMeetings').doc(id).delete();
+  }
+
+  // ── Notifications (심방/목사 권한/새가족 로테이션/팀 배정 등 이벤트 알림) ──
+  // 지금은 인앱 알림함으로만 동작. Firebase 연결 후에는 이 알림 문서 생성을
+  // 감지하는 Cloud Function에서 FCM 푸시를 함께 보내도록 확장하면 됨
+  Stream<List<NotificationModel>> streamUserNotifications(String userId) {
+    if (demoMode) return _demo.streamUserNotifications(userId);
+    return _db.collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(NotificationModel.fromFirestore).toList());
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    if (demoMode) { _demo.markNotificationRead(id); return; }
+    await _db.collection('notifications').doc(id).update({'isRead': true});
+  }
+
+  Future<void> markAllNotificationsRead(String userId) async {
+    if (demoMode) { _demo.markAllNotificationsRead(userId); return; }
+    final unread = await _db.collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .where('isRead', isEqualTo: false)
+        .get();
+    final batch = _db.batch();
+    for (final doc in unread.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+    await batch.commit();
+  }
+
+  Future<void> _addNotification({
+    required String userId,
+    required String title,
+    required String body,
+    required String type,
+  }) async {
+    await _db.collection('notifications').add({
+      'userId': userId,
+      'title': title,
+      'body': body,
+      'type': type,
+      'createdAt': Timestamp.fromDate(DateTime.now()),
+      'isRead': false,
+    });
+  }
+
+  // ── App Settings (기수 기반 이용 제한 기준) ─────────────────────────────
+  Stream<AppSettingsModel> streamAppSettings() {
+    if (demoMode) return _demo.streamAppSettings();
+    return _db.collection('settings').doc('app').snapshots().map(AppSettingsModel.fromFirestore);
+  }
+
+  Future<void> updateAppSettings(AppSettingsModel settings) async {
+    if (demoMode) { _demo.updateAppSettings(settings); return; }
+    await _db.collection('settings').doc('app').set(settings.toMap());
   }
 
   // ── Banners ───────────────────────────────────────────────────────────

@@ -1,17 +1,23 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
+import '../models/app_settings_model.dart';
 import '../services/auth_service.dart';
 import '../services/demo_data.dart';
-import '../services/firestore_service.dart' show demoMode;
+import '../services/firestore_service.dart';
+import '../utils/constants.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated }
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
+  StreamSubscription<AppSettingsModel>? _settingsSub;
 
   AuthStatus _status = AuthStatus.initial;
   UserModel? _currentUser;
   String? _error;
+  AppSettingsModel? _settings;
 
   AuthStatus get status => _status;
   UserModel? get currentUser => _currentUser;
@@ -24,17 +30,46 @@ class AuthProvider extends ChangeNotifier {
   bool get isExecutive => _currentUser?.isExecutive ?? false;
   bool get isMidLeader => _currentUser?.isMidLeader ?? false;
   bool get isSmallLeader => _currentUser?.isSmallLeader ?? false;
+  // 사역팀(콘텐츠팀 등) 소속 여부/팀장 여부 — department와 독립된 별도 축
+  bool get isMinistryLead => _currentUser?.isMinistryLead ?? false;
+  bool get inContentTeam => _currentUser?.ministryTeam == AppTeams.contentTeam;
 
   // 출석/회비 수정 권한: 소팀장 이상
   bool get canEditAttendance => isSmallLeader;
   // 출석/회비 팀 조회 권한: 중팀장 이상
   bool get canViewTeam => isMidLeader;
-  // 배너 관리 권한: 임원팀 이상
-  bool get canManageBanners => isExecutive;
+  // 배너 관리 권한: 임원팀 이상이거나, 콘텐츠팀 팀장(고유 권한), 또는 팀장이
+  // 직접 지정하여 권한을 공유받은 콘텐츠팀 팀원만 해당
+  bool get canManageBanners =>
+      isExecutive || (inContentTeam && isMinistryLead) || (inContentTeam && (_currentUser?.bannerAccessGranted ?? false));
+  // 배너 관리 권한 "공유"(위임)를 실행할 수 있는지 여부: 관리자 또는 콘텐츠팀 팀장만 가능
+  bool get canShareBannerAccess => isAdmin || (isMinistryLead && inContentTeam);
   // 회원 관리 권한: 소팀장 이상
   bool get canManageMembers => isSmallLeader;
+  // 관리 탭 진입 권한: 회원 관리 권한, 배너 관리 권한이 있거나, 사역팀(콘텐츠팀) 소속으로
+  // 회의 일정을 조회할 수 있는 경우
+  bool get canAccessAdminTab => canManageMembers || canManageBanners || inContentTeam;
+
+  AppSettingsModel? get appSettings => _settings;
+
+  // 기수 기반 이용 제한 여부 — true이면 출석 체크/회비 납부/심방 신청 등 쓰기 동작이
+  // 막히고 조회만 가능함. 목사님은 예외이며, 기수가 아직 등록되지 않았거나(cohort==null)
+  // 설정값을 아직 못 불러온 경우에는 안전하게 제한하지 않음
+  bool get isCohortRestricted {
+    final user = _currentUser;
+    final settings = _settings;
+    if (user == null || settings == null) return false;
+    if (user.role == UserRole.pastor) return false;
+    final cohort = user.cohort;
+    if (cohort == null) return false;
+    return cohort < settings.minAllowedCohort || cohort > settings.maxAllowedCohort;
+  }
 
   AuthProvider() {
+    _settingsSub = _firestoreService.streamAppSettings().listen((settings) {
+      _settings = settings;
+      notifyListeners();
+    });
     if (demoMode) {
       // 데모 모드에서는 로그인 상태 변화를 AuthService의 스트림으로 감지
       _authService.authStateChanges.listen((_) async {
@@ -67,6 +102,12 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _settingsSub?.cancel();
+    super.dispose();
   }
 
   Future<bool> signIn(String email, String password) async {

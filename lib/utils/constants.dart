@@ -54,6 +54,20 @@ class AppTeams {
   // 새가족 출석은 이 주차까지만 진행하고 이후 실제 소팀으로 배정됨
   static const newFamilyMaxWeeks = 3;
 
+  // 콘텐츠팀: 사역팀의 하나. department(중팀/소팀/임원팀/새가족팀)와는
+  // 독립된 별도 소속 축(UserModel.ministryTeam)으로 관리되며, 배너 관리
+  // 권한을 가짐. allDepts/smallTeams에는 포함하지 않음 (department 값이
+  // 아니라 ministryTeam 값이므로)
+  static const contentTeam = '콘텐츠팀';
+  // 현재 존재하는 사역팀 목록 (추후 다른 사역팀 추가 시 여기에 등록)
+  static const ministryTeams = [contentTeam];
+
+  // 사역팀에 소속될 수 있는 역할: 일반 팀원, 소팀장까지만.
+  // 임원팀/중팀장/(향후) 사역팀장은 이미 팀 하나를 이끄는 역할이므로
+  // 별도의 사역팀 팀원으로는 소속될 수 없음
+  static bool canJoinMinistryTeam(String role) =>
+      role == UserRole.member || role == UserRole.smallLeader;
+
   // X-0 = 중팀장 가상 소속팀, X-1~4 = 실제 소팀
   static const allDepts = [
     'A-0', 'A-1', 'A-2', 'A-3', 'A-4',

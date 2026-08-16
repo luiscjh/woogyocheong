@@ -3,9 +3,10 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/fee_model.dart';
-import '../../models/user_model.dart';
 import '../../utils/constants.dart';
 
+// 홈 하단 탭의 '회비' 화면: 역할과 무관하게 본인의 납부 여부만 확인/체크할 수 있음.
+// 팀 전체 회비 현황 관리는 관리 탭의 '회비 관리'(FeeManagementScreen)에서 별도로 제공됨.
 class FeeScreen extends StatefulWidget {
   const FeeScreen({super.key});
 
@@ -18,14 +19,24 @@ class _FeeScreenState extends State<FeeScreen> {
   int _year = DateTime.now().year;
   int _month = DateTime.now().month;
 
+  // 본인 회비 납부(마킹)는 조회 중인 달이 이번 달이면서, 그 달의 3~4주차일 때만 가능
+  // (조회는 언제든 가능. 소팀장/중팀장의 회비 관리 화면은 이 제약과 무관하게 항상 수정 가능)
+  bool get _isPayableWeek {
+    final now = DateTime.now();
+    if (_year != now.year || _month != now.month) return false;
+    final week = ((now.day - 1) / 7).floor() + 1;
+    return week == 3 || week == 4;
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser!;
+    final restricted = authProvider.isCohortRestricted;
 
     return Column(
       children: [
-        _PeriodSelector(
+        FeePeriodSelector(
           year: _year,
           month: _month,
           onChanged: (y, m) => setState(() {
@@ -34,25 +45,27 @@ class _FeeScreenState extends State<FeeScreen> {
           }),
         ),
         Expanded(
-          child: authProvider.isExecutive
-              ? _AdminFeeView(year: _year, month: _month, service: _service, canEdit: true)
-              : authProvider.isMidLeader
-                  ? _AdminFeeView(year: _year, month: _month, service: _service, canEdit: false, midTeamFilter: user.midTeam)
-                  : authProvider.isSmallLeader
-                      ? _AdminFeeView(year: _year, month: _month, service: _service, canEdit: true, smallTeamFilter: user.department)
-                      : _MemberFeeView(userId: user.uid, userName: user.name, year: _year, month: _month, service: _service),
+          child: _MemberFeeView(
+            userId: user.uid,
+            userName: user.name,
+            year: _year,
+            month: _month,
+            service: _service,
+            canEdit: _isPayableWeek && !restricted,
+            isCohortRestricted: restricted,
+          ),
         ),
       ],
     );
   }
 }
 
-class _PeriodSelector extends StatelessWidget {
+class FeePeriodSelector extends StatelessWidget {
   final int year;
   final int month;
   final void Function(int year, int month) onChanged;
 
-  const _PeriodSelector({required this.year, required this.month, required this.onChanged});
+  const FeePeriodSelector({super.key, required this.year, required this.month, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +107,8 @@ class _MemberFeeView extends StatelessWidget {
   final int year;
   final int month;
   final FirestoreService service;
+  final bool canEdit;
+  final bool isCohortRestricted;
 
   const _MemberFeeView({
     required this.userId,
@@ -101,6 +116,8 @@ class _MemberFeeView extends StatelessWidget {
     required this.year,
     required this.month,
     required this.service,
+    required this.canEdit,
+    required this.isCohortRestricted,
   });
 
   @override
@@ -151,22 +168,37 @@ class _MemberFeeView extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 40),
-              if (!isPaid)
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _setPaid(context, true),
-                    icon: const Icon(Icons.check),
-                    label: const Text('납부 완료로 표시'),
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
-                  ),
-                )
+              if (canEdit)
+                if (!isPaid)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _setPaid(context, true),
+                      icon: const Icon(Icons.check),
+                      label: const Text('납부 완료로 표시'),
+                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+                    ),
+                  )
+                else
+                  OutlinedButton.icon(
+                    onPressed: () => _setPaid(context, false),
+                    icon: const Icon(Icons.undo),
+                    label: const Text('납부 취소'),
+                    style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+                  )
               else
-                OutlinedButton.icon(
-                  onPressed: () => _setPaid(context, false),
-                  icon: const Icon(Icons.undo),
-                  label: const Text('납부 취소'),
-                  style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    isCohortRestricted
+                        ? '허용된 기수 범위가 아니라 조회만 가능합니다.'
+                        : '회비 납부는 매월 3~4주차에만 가능합니다.',
+                    style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
+                  ),
                 ),
               const SizedBox(height: 40),
               _FeeHistory(userId: userId, service: service),
@@ -226,161 +258,6 @@ class _FeeHistory extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _AdminFeeView extends StatelessWidget {
-  final int year;
-  final int month;
-  final FirestoreService service;
-  final bool canEdit;
-  final String? smallTeamFilter;
-  final String? midTeamFilter;
-
-  const _AdminFeeView({
-    required this.year,
-    required this.month,
-    required this.service,
-    this.canEdit = true,
-    this.smallTeamFilter,
-    this.midTeamFilter,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<List<UserModel>>(
-      stream: service.streamAllMembers(),
-      builder: (ctx, memberSnap) {
-        return StreamBuilder<List<FeeModel>>(
-          stream: service.streamFeesByPeriod(year, month),
-          builder: (ctx, feeSnap) {
-            if (memberSnap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            // 목사님은 회비 납부 대상에서 제외
-            var members = (memberSnap.data ?? []).where((m) => m.role != UserRole.pastor).toList();
-            if (smallTeamFilter != null) {
-              members = members.where((m) => m.department == smallTeamFilter).toList();
-            } else if (midTeamFilter != null) {
-              members = members.where((m) => m.midTeam == midTeamFilter).toList();
-            }
-            final fees = {for (final f in feeSnap.data ?? []) f.userId: f};
-            final paidCount = members.where((m) => fees[m.uid]?.isPaid == true).length;
-
-            return Column(
-              children: [
-                Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  child: Row(
-                    children: [
-                      _Stat(label: '전체', value: members.length, color: AppColors.primary),
-                      const SizedBox(width: 24),
-                      _Stat(label: '납부', value: paidCount, color: AppColors.success),
-                      const SizedBox(width: 24),
-                      _Stat(label: '미납', value: members.length - paidCount, color: AppColors.error),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    itemCount: members.length,
-                    itemBuilder: (ctx, i) {
-                      final m = members[i];
-                      final fee = fees[m.uid];
-                      final isPaid = fee?.isPaid ?? false;
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: isPaid ? AppColors.success : Colors.grey[300],
-                            child: Text(
-                              m.name.isNotEmpty ? m.name[0] : '?',
-                              style: TextStyle(
-                                color: isPaid ? Colors.white : AppColors.textSecondary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          title: Text(m.name),
-                          subtitle: Text(m.department),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _FeeChip(isPaid: isPaid),
-                              if (canEdit) ...[
-                                const SizedBox(width: 8),
-                                PopupMenuButton<bool>(
-                                  onSelected: (v) => service.setFee(
-                                    userId: m.uid,
-                                    userName: m.name,
-                                    year: year,
-                                    month: month,
-                                    isPaid: v,
-                                  ),
-                                  itemBuilder: (_) => [
-                                    const PopupMenuItem(value: true, child: Text('납부')),
-                                    const PopupMenuItem(value: false, child: Text('미납')),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  final String label;
-  final int value;
-  final Color color;
-
-  const _Stat({required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text('$value', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-      ],
-    );
-  }
-}
-
-class _FeeChip extends StatelessWidget {
-  final bool isPaid;
-
-  const _FeeChip({required this.isPaid});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: isPaid ? AppColors.success.withValues(alpha: 0.1) : AppColors.error.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        isPaid ? '납부' : '미납',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: isPaid ? AppColors.success : AppColors.error,
-        ),
-      ),
     );
   }
 }

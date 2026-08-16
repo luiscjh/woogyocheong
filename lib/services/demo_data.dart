@@ -9,6 +9,9 @@ import '../models/visit_slot_model.dart';
 import '../models/pastor_request_model.dart';
 import '../models/new_family_rotation_model.dart';
 import '../models/banner_model.dart';
+import '../models/ministry_meeting_model.dart';
+import '../models/notification_model.dart';
+import '../models/app_settings_model.dart';
 import '../utils/constants.dart';
 
 // 싱글턴 인메모리 저장소 – 데모 모드에서 Firebase 대신 사용
@@ -52,8 +55,10 @@ class DemoData {
     UserModel(uid: 'newfamilyleader001', name: '장리더', email: 'leader1@church.com', phone: '010-6666-7777', role: 'small_leader', department: AppTeams.newFamilyTeam, joinDate: DateTime(2023, 3, 1)),
     UserModel(uid: 'newfamilyleader002', name: '윤리더', email: 'leader2@church.com', phone: '010-6666-8888', role: 'small_leader', department: AppTeams.newFamilyTeam, joinDate: DateTime(2023, 6, 1)),
     // 팀원
-    UserModel(uid: 'member001', name: '이청년', email: 'lee@church.com', phone: '010-2345-6789', role: 'member', department: 'A-1', joinDate: DateTime(2021, 3, 1)),
-    UserModel(uid: 'member002', name: '박믿음', email: 'park@church.com', phone: '010-3456-7890', role: 'member', department: 'A-2', joinDate: DateTime(2021, 6, 1)),
+    // cohort=19: 현재 기수(20) 허용 범위(11~20) 안 — 정상 이용 데모용
+    UserModel(uid: 'member001', name: '이청년', email: 'lee@church.com', phone: '010-2345-6789', role: 'member', department: 'A-1', joinDate: DateTime(2021, 3, 1), birthDate: DateTime(2001, 4, 12), cohort: 19),
+    // cohort=5: 현재 기수(20) 허용 범위(11~20) 밖 — 기수 제한(읽기 전용) 데모용
+    UserModel(uid: 'member002', name: '박믿음', email: 'park@church.com', phone: '010-3456-7890', role: 'member', department: 'A-2', joinDate: DateTime(2021, 6, 1), birthDate: DateTime(1994, 9, 3), cohort: 5),
     UserModel(uid: 'member003', name: '최소망', email: 'choi@church.com', phone: '010-4567-8901', role: 'member', department: 'A-1', joinDate: DateTime(2022, 1, 1)),
     UserModel(uid: 'member004', name: '정사랑', email: 'jung@church.com', phone: '010-5678-9012', role: 'member', department: 'B-1', joinDate: DateTime(2022, 3, 1)),
     UserModel(uid: 'member005', name: '강기쁨', email: 'kang@church.com', phone: '010-6789-0123', role: 'member', department: 'B-2', joinDate: DateTime(2022, 6, 1)),
@@ -65,6 +70,14 @@ class DemoData {
     UserModel(uid: 'member008', name: '박새순', email: 'newbie3@church.com', phone: '010-1010-2020', role: 'member', department: AppTeams.newFamilyTeam, joinDate: DateTime.now()),
     // 새가족팀 팀원 - 출석 3회: 3주차 담당 리더 매칭 확인용
     UserModel(uid: 'member009', name: '한새길', email: 'newbie4@church.com', phone: '010-1111-2020', role: 'member', department: AppTeams.newFamilyTeam, joinDate: DateTime(2026, 5, 1)),
+    // 콘텐츠팀(사역팀) 팀장 - department(A-1)는 그대로 유지한 채 ministryTeam만
+    // 별도로 부여됨. 배너 관리 + 사역팀 회원 관리 + 회의 일정 관리 권한 보유
+    // (소팀장 현황·회비 관리는 실제 중팀장 역할이 아니므로 제외됨. AuthProvider 참고)
+    UserModel(uid: 'content001', name: '김콘텐츠', email: 'content@church.com', phone: '010-1212-3434', role: 'member', department: 'A-1', joinDate: DateTime(2024, 1, 1), ministryTeam: AppTeams.contentTeam, isMinistryLead: true),
+    // 콘텐츠팀(사역팀) 팀원 - 팀장이 아닌 일반 팀원. department는 실제 소속 소팀(D-4)을
+    // 그대로 유지한 채 ministryTeam만 추가로 부여됨. 배너 관리 권한은 팀장이 지정
+    // 해야만 부여되므로 기본값(false)을 유지
+    UserModel(uid: 'content002', name: '이콘텐츠', email: 'content2@church.com', phone: '010-1212-5656', role: 'member', department: 'D-4', joinDate: DateTime(2024, 3, 1), ministryTeam: AppTeams.contentTeam),
     // 테스트 계정: 내 정보 화면에서 관리자~팀원 역할을 자유롭게 전환하며 테스트 가능
     UserModel(uid: 'testing001', name: '테스트유저', email: 'testing@church.com', phone: '010-0000-0000', role: 'admin', department: 'A-1', joinDate: DateTime(2026, 1, 1)),
   ];
@@ -76,6 +89,11 @@ class DemoData {
   final List<PastorRequestModel> _pastorRequests = [];
   final List<NewFamilyRotationModel> _newFamilyRotations = [];
   final List<BannerModel> _banners = [];
+  final List<MinistryMeetingModel> _ministryMeetings = [];
+  final List<NotificationModel> _notifications = [];
+
+  // 앱 전역 설정(단일 레코드) — 기수 기반 이용 제한 기준
+  AppSettingsModel _settings = const AppSettingsModel(minAllowedCohort: 11, maxAllowedCohort: 20);
 
   // StreamControllers
   final _usersCtrl = StreamController<List<UserModel>>.broadcast();
@@ -86,6 +104,9 @@ class DemoData {
   final _pastorRequestsCtrl = StreamController<List<PastorRequestModel>>.broadcast();
   final _newFamilyRotationsCtrl = StreamController<List<NewFamilyRotationModel>>.broadcast();
   final _bannersCtrl = StreamController<List<BannerModel>>.broadcast();
+  final _ministryMeetingsCtrl = StreamController<List<MinistryMeetingModel>>.broadcast();
+  final _notificationsCtrl = StreamController<List<NotificationModel>>.broadcast();
+  final _settingsCtrl = StreamController<AppSettingsModel>.broadcast();
 
   void _initDemoData() {
     final now = DateTime.now();
@@ -132,6 +153,18 @@ class DemoData {
       ),
     ]);
 
+    // 콘텐츠팀(사역팀) 회의 일정 샘플
+    _ministryMeetings.addAll([
+      MinistryMeetingModel(
+        id: const Uuid().v4(),
+        ministryTeam: AppTeams.contentTeam,
+        date: now.subtract(const Duration(days: 7)),
+        topic: '7월 홍보 콘텐츠 기획',
+        discussion: '여름수련회 홍보 카드뉴스 시안 검토, SNS 업로드 일정 조율',
+        summary: '카드뉴스 시안 A안으로 확정, 다음 주까지 초안 제작 후 재검토 예정',
+      ),
+    ]);
+
     // 최근 3개월 회비 샘플
     for (var m = 0; m < 3; m++) {
       final month = now.month - m <= 0 ? now.month - m + 12 : now.month - m;
@@ -162,6 +195,35 @@ class DemoData {
       VisitSlotModel(id: const Uuid().v4(), dateTime: DateTime(nextSunday.year, nextSunday.month, nextSunday.day, 14, 0)),
       VisitSlotModel(id: const Uuid().v4(), dateTime: DateTime(nextSunday.year, nextSunday.month, nextSunday.day, 16, 0)),
       VisitSlotModel(id: const Uuid().v4(), dateTime: DateTime(nextSunday.year, nextSunday.month, nextSunday.day + 7, 14, 0)),
+    ]);
+
+    // 알림 샘플 (위 심방/로테이션 시드 데이터와 맞춘 예시)
+    _notifications.addAll([
+      NotificationModel(
+        id: const Uuid().v4(),
+        userId: 'member002',
+        title: '심방 신청 상태 변경',
+        body: "심방 신청이 '확정' 상태로 변경되었습니다.",
+        type: 'visit',
+        createdAt: now.subtract(const Duration(days: 9)),
+      ),
+      NotificationModel(
+        id: const Uuid().v4(),
+        userId: 'member003',
+        title: '심방 신청 상태 변경',
+        body: "심방 신청이 '완료' 상태로 변경되었습니다.",
+        type: 'visit',
+        createdAt: now.subtract(const Duration(days: 19)),
+        isRead: true,
+      ),
+      NotificationModel(
+        id: const Uuid().v4(),
+        userId: 'newfamilyleader001',
+        title: '새가족 로테이션 배정',
+        body: '2주차 새가족 로테이션 담당으로 배정되었습니다.',
+        type: 'newFamilyRotation',
+        createdAt: now.subtract(const Duration(days: 3)),
+      ),
     ]);
   }
 
@@ -198,6 +260,15 @@ class DemoData {
 
   void updateUser(UserModel user) {
     final idx = _users.indexWhere((u) => u.uid == user.uid);
+    // 소팀/중팀(department) 배정이 실제로 바뀐 경우에만 알림 발송
+    if (idx >= 0 && _users[idx].department != user.department && user.department.isNotEmpty) {
+      addNotification(
+        userId: user.uid,
+        title: '소속팀 변경',
+        body: '소속팀이 ${AppTeams.deptLabel(user.department)}(으)로 변경되었습니다.',
+        type: 'teamAssignment',
+      );
+    }
     if (idx >= 0) _users[idx] = user;
     _usersCtrl.add(List.from(_users));
   }
@@ -307,6 +378,14 @@ class DemoData {
         deptName: v.deptName, team: v.team, requestDate: v.requestDate, preferredDate: v.preferredDate,
         status: status, reason: v.reason, adminNote: adminNote ?? v.adminNote,
       );
+      if (v.status != status) {
+        addNotification(
+          userId: v.userId,
+          title: '심방 신청 상태 변경',
+          body: '심방 신청이 \'${VisitStatus.label(status)}\' 상태로 변경되었습니다.',
+          type: 'visit',
+        );
+      }
     }
     _visitsCtrl.add(List.from(_visits));
   }
@@ -361,7 +440,18 @@ class DemoData {
         id: r.id, userId: r.userId, userName: r.userName, email: r.email,
         requestDate: r.requestDate, status: status,
       );
+      addNotification(
+        userId: r.userId,
+        title: '목사 권한 신청 결과',
+        body: status == 'approved' ? '목사 권한 신청이 승인되었습니다.' : '목사 권한 신청이 거절되었습니다.',
+        type: 'pastorRequest',
+      );
     }
+    _pastorRequestsCtrl.add(_sortedPastorRequests());
+  }
+
+  void deletePastorRequest(String id) {
+    _pastorRequests.removeWhere((r) => r.id == id);
     _pastorRequestsCtrl.add(_sortedPastorRequests());
   }
 
@@ -379,6 +469,88 @@ class DemoData {
     _newFamilyRotations.removeWhere((r) => r.weekNumber == rotation.weekNumber);
     _newFamilyRotations.add(rotation);
     _newFamilyRotationsCtrl.add(_sortedRotations());
+    addNotification(
+      userId: rotation.leaderId,
+      title: '새가족 로테이션 배정',
+      body: '${rotation.weekNumber}주차 새가족 로테이션 담당으로 배정되었습니다.',
+      type: 'newFamilyRotation',
+    );
+  }
+
+  // ── Ministry Meetings (사역팀 회의 일정: 일자/주제/논의 내용/정리) ──────
+  Stream<List<MinistryMeetingModel>> streamMinistryMeetings(String ministryTeam) {
+    Future.microtask(() => _ministryMeetingsCtrl.add(_sortedMeetings()));
+    return _ministryMeetingsCtrl.stream.map(
+      (_) => _sortedMeetings().where((m) => m.ministryTeam == ministryTeam).toList(),
+    );
+  }
+
+  List<MinistryMeetingModel> _sortedMeetings() =>
+      (List<MinistryMeetingModel>.from(_ministryMeetings)..sort((a, b) => b.date.compareTo(a.date)));
+
+  void addMinistryMeeting(MinistryMeetingModel meeting) {
+    _ministryMeetings.add(meeting);
+    _ministryMeetingsCtrl.add(_sortedMeetings());
+  }
+
+  void updateMinistryMeeting(MinistryMeetingModel meeting) {
+    final idx = _ministryMeetings.indexWhere((m) => m.id == meeting.id);
+    if (idx >= 0) _ministryMeetings[idx] = meeting;
+    _ministryMeetingsCtrl.add(_sortedMeetings());
+  }
+
+  void deleteMinistryMeeting(String id) {
+    _ministryMeetings.removeWhere((m) => m.id == id);
+    _ministryMeetingsCtrl.add(_sortedMeetings());
+  }
+
+  // ── Notifications (심방/목사 권한/새가족 로테이션/팀 배정 등 이벤트 알림) ──
+  Stream<List<NotificationModel>> streamUserNotifications(String userId) {
+    Future.microtask(() => _notificationsCtrl.add(_sortedNotifications()));
+    return _notificationsCtrl.stream.map(
+      (_) => _sortedNotifications().where((n) => n.userId == userId).toList(),
+    );
+  }
+
+  List<NotificationModel> _sortedNotifications() =>
+      (List<NotificationModel>.from(_notifications)..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+
+  void addNotification({required String userId, required String title, required String body, required String type}) {
+    _notifications.add(NotificationModel(
+      id: const Uuid().v4(),
+      userId: userId,
+      title: title,
+      body: body,
+      type: type,
+      createdAt: DateTime.now(),
+    ));
+    _notificationsCtrl.add(_sortedNotifications());
+  }
+
+  void markNotificationRead(String id) {
+    final idx = _notifications.indexWhere((n) => n.id == id);
+    if (idx >= 0) _notifications[idx] = _notifications[idx].copyWith(isRead: true);
+    _notificationsCtrl.add(_sortedNotifications());
+  }
+
+  void markAllNotificationsRead(String userId) {
+    for (var i = 0; i < _notifications.length; i++) {
+      if (_notifications[i].userId == userId && !_notifications[i].isRead) {
+        _notifications[i] = _notifications[i].copyWith(isRead: true);
+      }
+    }
+    _notificationsCtrl.add(_sortedNotifications());
+  }
+
+  // ── App Settings (기수 기반 이용 제한 기준) ──────────────────
+  Stream<AppSettingsModel> streamAppSettings() {
+    Future.microtask(() => _settingsCtrl.add(_settings));
+    return _settingsCtrl.stream;
+  }
+
+  void updateAppSettings(AppSettingsModel settings) {
+    _settings = settings;
+    _settingsCtrl.add(_settings);
   }
 
   // ── Banners ────────────────────────────────────────────────

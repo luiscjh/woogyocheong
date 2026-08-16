@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart';
 import 'package:uuid/uuid.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
@@ -12,7 +14,11 @@ import '../../providers/auth_provider.dart';
 import '../../utils/constants.dart';
 
 class MemberManagementScreen extends StatefulWidget {
-  const MemberManagementScreen({super.key});
+  // true이면 사역팀(콘텐츠팀 등) 팀장이 본인 팀원 명단을 조회만 할 수 있는 모드.
+  // 이메일/소속팀 변경 등 관리자 수준의 회원 정보 수정은 할 수 없고, 조회만 가능
+  final bool readOnly;
+
+  const MemberManagementScreen({super.key, this.readOnly = false});
 
   @override
   State<MemberManagementScreen> createState() => _MemberManagementScreenState();
@@ -34,19 +40,21 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('회원 관리'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            tooltip: '파일 형식 안내',
-            onPressed: _showFormatGuide,
-          ),
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            tooltip: '엑셀/CSV 가져오기',
-            onPressed: _importFile,
-          ),
-        ],
+        title: Text(widget.readOnly ? '회원 조회' : '회원 관리'),
+        actions: widget.readOnly
+            ? null
+            : [
+                IconButton(
+                  icon: const Icon(Icons.help_outline),
+                  tooltip: '파일 형식 안내',
+                  onPressed: _showFormatGuide,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.upload_file),
+                  tooltip: '엑셀/CSV 가져오기',
+                  onPressed: _importFile,
+                ),
+              ],
       ),
       body: StreamBuilder<List<UserModel>>(
         stream: _service.streamAllMembers(),
@@ -56,8 +64,11 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
           }
           // 목사님은 회원 관리 대상에서 제외
           var members = (snap.data ?? []).where((m) => m.role != UserRole.pastor).toList();
-          // 역할에 따라 조회 범위 제한
-          if (!authProvider.isExecutive) {
+          if (widget.readOnly) {
+            // 사역팀장 조회 모드: 본인 사역팀 소속 인원만 조회
+            members = members.where((m) => m.ministryTeam == currentUser.ministryTeam).toList();
+          } else if (!authProvider.isExecutive) {
+            // 역할에 따라 조회 범위 제한
             if (authProvider.isMidLeader) {
               members = members.where((m) => m.midTeam == currentUser.midTeam).toList();
             } else if (authProvider.isSmallLeader) {
@@ -72,34 +83,84 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
                   const Icon(Icons.people_outline, size: 64, color: Colors.grey),
                   const SizedBox(height: 12),
                   const Text('등록된 회원이 없습니다.'),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () => _showAddMemberDialog(context),
-                    icon: const Icon(Icons.person_add),
-                    label: const Text('회원 추가'),
-                  ),
+                  if (!widget.readOnly) ...[
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => _showAddMemberDialog(context),
+                      icon: const Icon(Icons.person_add),
+                      label: const Text('회원 추가'),
+                    ),
+                  ],
                 ],
               ),
             );
           }
-          return ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: members.length,
-            itemBuilder: (ctx, i) => _MemberTile(
-              member: members[i],
-              service: _service,
-              onEdit: () => _showEditMemberDialog(context, members[i]),
-            ),
+          return StreamBuilder<List<AttendanceModel>>(
+            stream: _service.streamAllAttendance(),
+            builder: (ctx, attSnap) {
+              final attendance = attSnap.data ?? [];
+              return ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: members.length,
+                itemBuilder: (ctx, i) => _MemberTile(
+                  member: members[i],
+                  service: _service,
+                  readOnly: widget.readOnly,
+                  onEdit: () => _showEditMemberDialog(context, members[i]),
+                  // 사역팀장 본인은 관리자만 소속을 변경할 수 있으므로 제거 대상에서 제외
+                  onRemoveFromMinistryTeam: widget.readOnly && !members[i].isMinistryLead
+                      ? () => _confirmRemoveFromMinistryTeam(context, members[i])
+                      : null,
+                  newFamilyWeek: _newFamilyWeek(members[i], attendance),
+                ),
+              );
+            },
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddMemberDialog(context),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        child: const Icon(Icons.person_add),
+      floatingActionButton: widget.readOnly
+          ? null
+          : FloatingActionButton(
+              onPressed: () => _showAddMemberDialog(context),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              child: const Icon(Icons.person_add),
+            ),
+    );
+  }
+
+  // 새가족팀 소속 일반 팀원(=새가족 본인, 리더/팀장 제외)의 출석 횟수 기준 진행 주차.
+  // 새가족이 아니면 null을 반환해 일반 소속팀 라벨을 그대로 쓰도록 함
+  int? _newFamilyWeek(UserModel member, List<AttendanceModel> attendance) {
+    if (member.department != AppTeams.newFamilyTeam || member.role != UserRole.member) return null;
+    final count = attendance.where((a) => a.userId == member.uid && a.isPresent).length;
+    return count > AppTeams.newFamilyMaxWeeks ? AppTeams.newFamilyMaxWeeks : count;
+  }
+
+  // 사역팀(콘텐츠팀 등) 팀장이 본인 팀에서 팀원을 제거함. 이메일/소속팀(department)
+  // 등 다른 회원 정보는 건드리지 않고 사역팀 소속(ministryTeam)만 해제함
+  Future<void> _confirmRemoveFromMinistryTeam(BuildContext context, UserModel member) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('콘텐츠팀에서 제거'),
+        content: Text('${member.name}님을 콘텐츠팀에서 제거하시겠습니까?\n소속팀 등 다른 정보는 유지되고 콘텐츠팀 소속만 해제됩니다.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('제거'),
+          ),
+        ],
       ),
     );
+    if (confirm != true) return;
+    await _service.updateUser(member.copyWith(
+      ministryTeam: '',
+      isMinistryLead: false,
+      bannerAccessGranted: false,
+    ));
   }
 
   void _showFormatGuide() {
@@ -153,8 +214,10 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
 
     try {
       final ext = file.extension?.toLowerCase();
+      // String.fromCharCodes는 UTF-8을 디코딩하지 않고 바이트를 그대로 문자
+      // 코드로 취급해 한글(3바이트 문자)이 깨지므로 반드시 utf8.decode 사용
       final members = ext == 'csv'
-          ? _parseCsv(String.fromCharCodes(bytes))
+          ? _parseCsv(utf8.decode(bytes, allowMalformed: true))
           : _parseExcel(bytes);
 
       if (members.isEmpty) {
@@ -411,8 +474,21 @@ class _MemberTile extends StatelessWidget {
   final UserModel member;
   final FirestoreService service;
   final VoidCallback onEdit;
+  final bool readOnly;
+  // 조회 전용(readOnly) 화면에서만 사용되는, 사역팀에서 팀원을 제거하는 액션
+  final VoidCallback? onRemoveFromMinistryTeam;
+  // null이 아니면 새가족(새가족팀 소속 일반 팀원)이라는 뜻이며, 소속팀 라벨 대신
+  // "새가족 n주차"를 표시하는 데 사용됨
+  final int? newFamilyWeek;
 
-  const _MemberTile({required this.member, required this.service, required this.onEdit});
+  const _MemberTile({
+    required this.member,
+    required this.service,
+    required this.onEdit,
+    this.readOnly = false,
+    this.onRemoveFromMinistryTeam,
+    this.newFamilyWeek,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -442,17 +518,27 @@ class _MemberTile extends StatelessWidget {
             ],
           ],
         ),
-        subtitle: Text('${AppTeams.deptLabel(member.department)} · ${member.email}'),
-        trailing: PopupMenuButton<String>(
-          onSelected: (v) {
-            if (v == 'edit') onEdit();
-            if (v == 'delete') _confirmDelete(context);
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit', child: Text('수정')),
-            const PopupMenuItem(value: 'delete', child: Text('삭제', style: TextStyle(color: Colors.red))),
-          ],
+        subtitle: Text(
+          '${newFamilyWeek != null ? '새가족 $newFamilyWeek주차' : AppTeams.deptLabel(member.department)} · ${member.email}',
         ),
+        trailing: readOnly
+            ? (onRemoveFromMinistryTeam == null
+                ? null
+                : TextButton(
+                    onPressed: onRemoveFromMinistryTeam,
+                    style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                    child: const Text('제거'),
+                  ))
+            : PopupMenuButton<String>(
+                onSelected: (v) {
+                  if (v == 'edit') onEdit();
+                  if (v == 'delete') _confirmDelete(context);
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'edit', child: Text('수정')),
+                  const PopupMenuItem(value: 'delete', child: Text('삭제', style: TextStyle(color: Colors.red))),
+                ],
+              ),
       ),
     );
   }
@@ -496,6 +582,11 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
   late final TextEditingController _phoneCtrl;
   late String _dept;
   late String _role;
+  late String _ministryTeam;
+  late bool _isMinistryLead;
+  late bool _bannerAccessGranted;
+  late final TextEditingController _cohortCtrl;
+  DateTime? _birthDate;
   bool _isLoading = false;
 
   bool get isEditing => widget.member != null;
@@ -510,6 +601,11 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     // allDepts에 없는 값이면 기본값으로 fallback
     if (!AppTeams.allDepts.contains(_dept)) _dept = AppTeams.smallTeams.first;
     _role = widget.member?.role ?? UserRole.member;
+    _ministryTeam = widget.member?.ministryTeam ?? '';
+    _isMinistryLead = widget.member?.isMinistryLead ?? false;
+    _bannerAccessGranted = widget.member?.bannerAccessGranted ?? false;
+    _cohortCtrl = TextEditingController(text: widget.member?.cohort?.toString());
+    _birthDate = widget.member?.birthDate;
   }
 
   @override
@@ -517,12 +613,35 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
+    _cohortCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickBirthDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate ?? DateTime(2000, 1, 1),
+      firstDate: DateTime(1950),
+      lastDate: DateTime.now(),
+      locale: const Locale('ko'),
+    );
+    if (picked != null) setState(() => _birthDate = picked);
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
+
+    // 임원팀/중팀장 이상 역할은 사역팀에 소속될 수 없으므로 방어적으로 초기화
+    final canJoinMinistry = AppTeams.canJoinMinistryTeam(_role);
+    final effectiveMinistryTeam = canJoinMinistry ? _ministryTeam : '';
+    final effectiveIsMinistryLead = canJoinMinistry ? _isMinistryLead : false;
+    // 배너 관리 권한 공유는 콘텐츠팀 팀장이 아닌 콘텐츠팀 팀원에게만 의미가 있음
+    // (팀장은 이미 고유 권한으로 보유)
+    final effectiveBannerAccessGranted =
+        effectiveMinistryTeam == AppTeams.contentTeam && !effectiveIsMinistryLead ? _bannerAccessGranted : false;
+    final cohortText = _cohortCtrl.text.trim();
+    final cohort = cohortText.isEmpty ? null : int.tryParse(cohortText);
 
     try {
       if (isEditing) {
@@ -532,8 +651,19 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           phone: _phoneCtrl.text.trim(),
           department: _dept,
           role: _role,
+          ministryTeam: effectiveMinistryTeam,
+          isMinistryLead: effectiveIsMinistryLead,
+          bannerAccessGranted: effectiveBannerAccessGranted,
+          birthDate: _birthDate,
+          cohort: cohort,
         );
         await widget.service.updateUser(updated);
+        // 본인 계정을 수정한 경우, 방금 저장한 값이 현재 세션의 AuthProvider
+        // 캐시에도 즉시 반영되도록 함 (그렇지 않으면 재로그인 전까지 배너 관리
+        // 권한 공유 등 변경 사항이 화면에 반영되지 않음)
+        if (mounted && context.read<AuthProvider>().currentUser?.uid == updated.uid) {
+          context.read<AuthProvider>().setCurrentUser(updated);
+        }
       } else {
         final user = UserModel(
           uid: const Uuid().v4(),
@@ -543,6 +673,11 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           role: _role,
           department: _dept,
           joinDate: DateTime.now(),
+          ministryTeam: effectiveMinistryTeam,
+          isMinistryLead: effectiveIsMinistryLead,
+          bannerAccessGranted: effectiveBannerAccessGranted,
+          birthDate: _birthDate,
+          cohort: cohort,
         );
         await widget.service.importMembers([user]);
       }
@@ -554,6 +689,12 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    // 사역팀장 지정(콘텐츠팀 등 사역팀의 고유 권한 보유자 지정)은 관리자만 가능
+    final canEditMinistryLead = auth.isAdmin;
+    // 배너 관리 권한 공유(위임)는 관리자 또는 해당 사역팀 팀장만 가능
+    final canShareBannerAccess = auth.canShareBannerAccess;
+
     return AlertDialog(
       title: Text(isEditing ? '회원 수정' : '회원 추가'),
       content: SingleChildScrollView(
@@ -581,6 +722,26 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
                 keyboardType: TextInputType.phone,
               ),
               const SizedBox(height: 12),
+              InkWell(
+                onTap: _pickBirthDate,
+                child: InputDecorator(
+                  decoration: const InputDecoration(labelText: '생년월일', prefixIcon: Icon(Icons.cake_outlined)),
+                  child: Text(
+                    _birthDate != null ? DateFormat('yyyy년 MM월 dd일').format(_birthDate!) : '선택 안 함',
+                    style: TextStyle(color: _birthDate != null ? null : Theme.of(context).hintColor),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _cohortCtrl,
+                decoration: const InputDecoration(labelText: '기수', prefixIcon: Icon(Icons.groups_2_outlined)),
+                keyboardType: TextInputType.number,
+                validator: (v) => (v != null && v.trim().isNotEmpty && int.tryParse(v.trim()) == null)
+                    ? '숫자를 입력해 주세요.'
+                    : null,
+              ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: AppTeams.allDepts.contains(_dept) ? _dept : AppTeams.smallTeams.first,
                 decoration: const InputDecoration(labelText: '소속팀'),
@@ -597,8 +758,52 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
                 items: UserRole.labels.entries
                     .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
                     .toList(),
-                onChanged: (v) => setState(() => _role = v!),
+                onChanged: (v) => setState(() {
+                  _role = v!;
+                  // 임원팀/중팀장 이상은 사역팀에 소속될 수 없으므로 선택을 초기화
+                  if (!AppTeams.canJoinMinistryTeam(_role)) {
+                    _ministryTeam = '';
+                    _isMinistryLead = false;
+                  }
+                }),
               ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: AppTeams.canJoinMinistryTeam(_role) ? _ministryTeam : '',
+                decoration: const InputDecoration(labelText: '사역팀 (선택)'),
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('없음')),
+                  ...AppTeams.ministryTeams.map((t) => DropdownMenuItem(value: t, child: Text(t))),
+                ],
+                onChanged: !AppTeams.canJoinMinistryTeam(_role)
+                    ? null
+                    : (v) => setState(() {
+                          _ministryTeam = v ?? '';
+                          if (_ministryTeam.isEmpty) _isMinistryLead = false;
+                        }),
+              ),
+              if (AppTeams.canJoinMinistryTeam(_role) && _ministryTeam.isNotEmpty)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('사역팀장'),
+                  subtitle: canEditMinistryLead ? null : const Text('사역팀장 지정은 관리자만 변경할 수 있습니다.'),
+                  value: _isMinistryLead,
+                  onChanged: canEditMinistryLead ? (v) => setState(() => _isMinistryLead = v ?? false) : null,
+                ),
+              if (AppTeams.canJoinMinistryTeam(_role) &&
+                  _ministryTeam == AppTeams.contentTeam &&
+                  !_isMinistryLead)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('배너 관리 권한 공유'),
+                  subtitle: canShareBannerAccess
+                      ? const Text('콘텐츠팀 팀장이 지정한 팀원만 배너 관리 권한을 공유받을 수 있습니다.')
+                      : const Text('배너 관리 권한 공유는 관리자 또는 콘텐츠팀 팀장만 설정할 수 있습니다.'),
+                  value: _bannerAccessGranted,
+                  onChanged: canShareBannerAccess ? (v) => setState(() => _bannerAccessGranted = v ?? false) : null,
+                ),
             ],
           ),
         ),

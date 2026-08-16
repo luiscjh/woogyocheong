@@ -12,6 +12,7 @@ class AttendanceAdminList extends StatelessWidget {
   final bool canEdit;
   final String? smallTeamFilter; // 소팀장: 본인 소팀만
   final String? midTeamFilter;   // 중팀장: 본인 중팀만
+  final String? ministryTeamFilter; // 사역팀장: 본인 사역팀 소속만
   final bool canDownload;        // 임원팀/관리자만 명단 다운로드 가능
 
   const AttendanceAdminList({
@@ -21,6 +22,7 @@ class AttendanceAdminList extends StatelessWidget {
     this.canEdit = true,
     this.smallTeamFilter,
     this.midTeamFilter,
+    this.ministryTeamFilter,
     this.canDownload = false,
   });
 
@@ -51,6 +53,8 @@ class AttendanceAdminList extends StatelessWidget {
               members = members.where((m) => m.department == smallTeamFilter).toList();
             } else if (midTeamFilter != null) {
               members = members.where((m) => m.midTeam == midTeamFilter).toList();
+            } else if (ministryTeamFilter != null) {
+              members = members.where((m) => m.ministryTeam == ministryTeamFilter).toList();
             }
             final Map<String, AttendanceModel> attendances = {
               for (final a in attSnap.data ?? []) a.userId: a
