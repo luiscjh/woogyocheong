@@ -7,6 +7,7 @@ import '../../services/firestore_service.dart';
 import '../../models/visit_model.dart';
 import '../../models/visit_slot_model.dart';
 import '../../utils/constants.dart';
+import '../../widgets/warning_banner.dart';
 
 class VisitScreen extends StatelessWidget {
   const VisitScreen({super.key});
@@ -18,7 +19,7 @@ class VisitScreen extends StatelessWidget {
     final user = authProvider.currentUser!;
 
     // 심방 신청 내용은 신청자 본인과 목사님만 조회 가능 (관리자 포함 그 외 전원은 본인 신청 내역만 조회)
-    if (user.role == UserRole.pastor) {
+    if (user.isPastor) {
       return _AdminVisitView(service: service, canConfirm: true);
     }
     return _MemberVisitView(service: service, user: user, isCohortRestricted: authProvider.isCohortRestricted);
@@ -44,20 +45,10 @@ class _MemberVisitView extends StatelessWidget {
           return CustomScrollView(
             slivers: [
               if (isCohortRestricted)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                const SliverPadding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
                   sliver: SliverToBoxAdapter(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.warning.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        '허용된 기수 범위가 아니라 심방 신청 없이 조회만 가능합니다.',
-                        style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
-                      ),
-                    ),
+                    child: WarningBanner('허용된 기수 범위가 아니라 심방 신청 없이 조회만 가능합니다.'),
                   ),
                 ),
               SliverPadding(
@@ -560,7 +551,7 @@ class _VisitDetailDialog extends StatelessWidget {
   }
 
   Future<void> _updateStatus(BuildContext context, String status) async {
-    await service.updateVisitStatus(visit.id, status);
+    await service.updateVisitStatus(visit.id, status, previousStatus: visit.status, visitUserId: visit.userId);
     if (context.mounted) Navigator.pop(context);
   }
 }

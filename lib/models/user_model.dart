@@ -53,8 +53,9 @@ class UserModel {
   });
 
   // 역할 계층 헬퍼
+  bool get isPastor => role == UserRole.pastor;
   // 목사님은 관리자와 동일한 권한을 가짐
-  bool get isAdmin => role == UserRole.admin || role == UserRole.pastor;
+  bool get isAdmin => role == UserRole.admin || isPastor;
   bool get isExecutive => role == UserRole.executive || isAdmin;
   bool get isMidLeader => role == UserRole.midLeader || isExecutive;
   bool get isSmallLeader => role == UserRole.smallLeader || isMidLeader;

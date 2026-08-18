@@ -18,7 +18,7 @@ class NewFamilyManagementScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final service = FirestoreService();
     // 목사님은 새가족 관리를 조회만 할 수 있고, 소팀/새가족팀 배정 등 실제 변경 권한은 없음
-    final readOnly = context.watch<AuthProvider>().currentUser?.role == UserRole.pastor;
+    final readOnly = context.watch<AuthProvider>().isPastor;
     return Scaffold(
       appBar: AppBar(title: const Text('새가족 관리')),
       body: StreamBuilder<List<UserModel>>(
@@ -193,7 +193,8 @@ class _CurrentMemberCard extends StatelessWidget {
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
             ElevatedButton(
               onPressed: () async {
-                await service.updateUser(member.copyWith(department: selected, newFamilyGraduatedTo: selected));
+                await service.updateUser(member.copyWith(department: selected, newFamilyGraduatedTo: selected),
+                    previousDepartment: member.department);
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -292,7 +293,7 @@ class _CandidateCard extends StatelessWidget {
       ),
     );
     if (confirm != true) return;
-    await service.updateUser(member.copyWith(department: AppTeams.newFamilyTeam));
+    await service.updateUser(member.copyWith(department: AppTeams.newFamilyTeam), previousDepartment: member.department);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${member.name}님을 새가족팀으로 배정했습니다.'), backgroundColor: AppColors.success),

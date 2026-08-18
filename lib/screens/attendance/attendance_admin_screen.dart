@@ -48,7 +48,7 @@ class AttendanceAdminList extends StatelessWidget {
               return const Center(child: CircularProgressIndicator());
             }
             // 목사님은 출결 관리 대상에서 제외
-            var members = (memberSnap.data ?? []).where((m) => m.role != UserRole.pastor).toList();
+            var members = (memberSnap.data ?? []).where((m) => !m.isPastor).toList();
             if (smallTeamFilter != null) {
               members = members.where((m) => m.department == smallTeamFilter).toList();
             } else if (midTeamFilter != null) {

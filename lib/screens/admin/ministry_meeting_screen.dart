@@ -6,18 +6,19 @@ import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/ministry_meeting_model.dart';
 import '../../utils/constants.dart';
+import '../../widgets/confirm_dialog.dart';
 
 // 사역팀(콘텐츠팀 등) 팀장 전용: 회의 일정을 일자/주제/논의 내용/정리 내용을
 // 한 화면(폼)에서 함께 관리. 팀원 출석 대신 회의 기록으로 팀 운영을 트래킹.
-// readOnly가 true이면(팀장이 아닌 일반 팀원) 조회만 가능하고 추가/수정/삭제는 불가
+// 팀장이 아닌 일반 팀원은 조회만 가능하고 추가/수정/삭제는 불가
 class MinistryMeetingScreen extends StatelessWidget {
-  final bool readOnly;
-
-  const MinistryMeetingScreen({super.key, this.readOnly = false});
+  const MinistryMeetingScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final user = context.read<AuthProvider>().currentUser!;
+    final auth = context.watch<AuthProvider>();
+    final user = auth.currentUser!;
+    final readOnly = !auth.isMinistryLead;
     final service = FirestoreService();
 
     return Scaffold(
@@ -209,22 +210,12 @@ class _MeetingFormDialogState extends State<_MeetingFormDialog> {
   }
 
   Future<void> _delete() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('회의 일정 삭제'),
-        content: const Text('이 회의 일정을 삭제하시겠습니까?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('삭제'),
-          ),
-        ],
-      ),
+    final confirm = await confirmDestructiveAction(
+      context,
+      title: '회의 일정 삭제',
+      content: '이 회의 일정을 삭제하시겠습니까?',
     );
-    if (confirm != true) return;
+    if (!confirm) return;
     await widget.service.deleteMinistryMeeting(widget.meeting!.id);
     if (mounted) Navigator.pop(context);
   }

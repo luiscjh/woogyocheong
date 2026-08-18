@@ -33,10 +33,13 @@ class FirestoreService {
     return doc.exists ? UserModel.fromFirestore(doc) : null;
   }
 
-  Future<void> updateUser(UserModel user) async {
+  // previousDepartment를 호출부가 이미 들고 있으면(대부분의 경우) 그대로 전달해
+  // 변경 감지용 추가 조회 없이 바로 갱신할 수 있음
+  Future<void> updateUser(UserModel user, {String? previousDepartment}) async {
     if (demoMode) { _demo.updateUser(user); return; }
-    final existing = await _db.collection('users').doc(user.uid).get();
-    final oldDept = existing.data()?['department'] as String? ?? '';
+    final oldDept = previousDepartment ??
+        (await _db.collection('users').doc(user.uid).get()).data()?['department'] as String? ??
+        '';
     await _db.collection('users').doc(user.uid).update(user.toMap());
     if (oldDept.isNotEmpty && oldDept != user.department && user.department.isNotEmpty) {
       await _addNotification(
@@ -55,8 +58,10 @@ class FirestoreService {
 
   // 역할 양도: outgoing의 역할/추가 권한을 incoming에게 넘기고 outgoing은 팀원으로 전환
   Future<void> transferRole(UserModel outgoing, UserModel incoming) async {
-    await updateUser(incoming.copyWith(role: outgoing.role, permissions: outgoing.permissions));
-    await updateUser(outgoing.copyWith(role: UserRole.member, permissions: const []));
+    await updateUser(incoming.copyWith(role: outgoing.role, permissions: outgoing.permissions),
+        previousDepartment: incoming.department);
+    await updateUser(outgoing.copyWith(role: UserRole.member, permissions: const []),
+        previousDepartment: outgoing.department);
   }
 
   Future<void> importMembers(List<UserModel> members) async {
@@ -152,17 +157,24 @@ class FirestoreService {
     await _db.collection('visits').doc(visit.id).set(visit.toMap());
   }
 
-  Future<void> updateVisitStatus(String visitId, String status, {String? adminNote}) async {
+  // previousStatus/visitUserId를 호출부가 이미 들고 있는 VisitModel에서 그대로
+  // 전달하면 변경 감지용 추가 조회 없이 바로 갱신할 수 있음
+  Future<void> updateVisitStatus(String visitId, String status,
+      {String? adminNote, String? previousStatus, String? visitUserId}) async {
     if (demoMode) { _demo.updateVisitStatus(visitId, status, adminNote: adminNote); return; }
-    final doc = await _db.collection('visits').doc(visitId).get();
-    final oldStatus = doc.data()?['status'] as String? ?? '';
-    final visitUserId = doc.data()?['userId'] as String? ?? '';
+    var oldStatus = previousStatus;
+    var userId = visitUserId;
+    if (oldStatus == null || userId == null) {
+      final doc = await _db.collection('visits').doc(visitId).get();
+      oldStatus = doc.data()?['status'] as String? ?? '';
+      userId = doc.data()?['userId'] as String? ?? '';
+    }
     final update = <String, dynamic>{'status': status};
     if (adminNote != null) update['adminNote'] = adminNote;
     await _db.collection('visits').doc(visitId).update(update);
-    if (visitUserId.isNotEmpty && oldStatus != status) {
+    if (userId.isNotEmpty && oldStatus != status) {
       await _addNotification(
-        userId: visitUserId,
+        userId: userId,
         title: '심방 신청 상태 변경',
         body: "심방 신청이 '${VisitStatus.label(status)}' 상태로 변경되었습니다.",
         type: 'visit',
@@ -235,18 +247,19 @@ class FirestoreService {
 
   // 승인: 신청자 역할을 목사님으로 전환하고 신청 상태를 approved로 변경
   Future<void> approvePastorRequest(String requestId, UserModel requester) async {
-    await updateUser(requester.copyWith(role: UserRole.pastor));
-    await _updatePastorRequestStatus(requestId, 'approved');
+    await updateUser(requester.copyWith(role: UserRole.pastor), previousDepartment: requester.department);
+    await _updatePastorRequestStatus(requestId, 'approved', requesterId: requester.uid);
   }
 
-  Future<void> rejectPastorRequest(String requestId) async {
-    await _updatePastorRequestStatus(requestId, 'rejected');
+  Future<void> rejectPastorRequest(String requestId, {String? requesterId}) async {
+    await _updatePastorRequestStatus(requestId, 'rejected', requesterId: requesterId);
   }
 
-  Future<void> _updatePastorRequestStatus(String id, String status) async {
+  // requesterId를 호출부가 이미 들고 있는 PastorRequestModel에서 그대로 전달하면
+  // 변경 감지용 추가 조회 없이 바로 갱신할 수 있음
+  Future<void> _updatePastorRequestStatus(String id, String status, {String? requesterId}) async {
     if (demoMode) { _demo.updatePastorRequestStatus(id, status); return; }
-    final doc = await _db.collection('pastorRequests').doc(id).get();
-    final requesterId = doc.data()?['userId'] as String? ?? '';
+    requesterId ??= (await _db.collection('pastorRequests').doc(id).get()).data()?['userId'] as String? ?? '';
     await _db.collection('pastorRequests').doc(id).update({'status': status});
     if (requesterId.isNotEmpty) {
       await _addNotification(

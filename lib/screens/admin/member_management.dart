@@ -12,13 +12,10 @@ import '../../models/attendance_model.dart';
 import '../../models/new_family_rotation_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/constants.dart';
+import '../../widgets/confirm_dialog.dart';
 
 class MemberManagementScreen extends StatefulWidget {
-  // true이면 사역팀(콘텐츠팀 등) 팀장이 본인 팀원 명단을 조회만 할 수 있는 모드.
-  // 이메일/소속팀 변경 등 관리자 수준의 회원 정보 수정은 할 수 없고, 조회만 가능
-  final bool readOnly;
-
-  const MemberManagementScreen({super.key, this.readOnly = false});
+  const MemberManagementScreen({super.key});
 
   @override
   State<MemberManagementScreen> createState() => _MemberManagementScreenState();
@@ -31,6 +28,9 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final currentUser = authProvider.currentUser!;
+    // 사역팀(콘텐츠팀 등) 팀장은 본인 팀원 명단을 조회만 할 수 있음. 이메일/소속팀
+    // 변경 등 관리자 수준의 회원 정보 수정은 할 수 없고, 조회만 가능
+    final readOnly = !authProvider.isSmallLeader && authProvider.isMinistryLead;
 
     // 새가족팀 리더는 팀 전체 명단(팀장/다른 리더 포함)이 아니라, 본인이
     // 배정된 주차에 해당하는 새가족만 확인하면 되므로 화면을 대체
@@ -40,8 +40,8 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.readOnly ? '회원 조회' : '회원 관리'),
-        actions: widget.readOnly
+        title: Text(readOnly ? '회원 조회' : '회원 관리'),
+        actions: readOnly
             ? null
             : [
                 IconButton(
@@ -63,8 +63,8 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           // 목사님은 회원 관리 대상에서 제외
-          var members = (snap.data ?? []).where((m) => m.role != UserRole.pastor).toList();
-          if (widget.readOnly) {
+          var members = (snap.data ?? []).where((m) => !m.isPastor).toList();
+          if (readOnly) {
             // 사역팀장 조회 모드: 본인 사역팀 소속 인원만 조회
             members = members.where((m) => m.ministryTeam == currentUser.ministryTeam).toList();
           } else if (!authProvider.isExecutive) {
@@ -83,7 +83,7 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
                   const Icon(Icons.people_outline, size: 64, color: Colors.grey),
                   const SizedBox(height: 12),
                   const Text('등록된 회원이 없습니다.'),
-                  if (!widget.readOnly) ...[
+                  if (!readOnly) ...[
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
                       onPressed: () => _showAddMemberDialog(context),
@@ -98,27 +98,32 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
           return StreamBuilder<List<AttendanceModel>>(
             stream: _service.streamAllAttendance(),
             builder: (ctx, attSnap) {
-              final attendance = attSnap.data ?? [];
+              // 회원별 출석 횟수를 한 번만 집계해 두고 행마다 조회만 하도록 함
+              // (행마다 전체 출석 목록을 다시 훑으면 회원이 많아질수록 느려짐)
+              final presentCounts = <String, int>{};
+              for (final a in attSnap.data ?? <AttendanceModel>[]) {
+                if (a.isPresent) presentCounts[a.userId] = (presentCounts[a.userId] ?? 0) + 1;
+              }
               return ListView.builder(
                 padding: const EdgeInsets.all(12),
                 itemCount: members.length,
                 itemBuilder: (ctx, i) => _MemberTile(
                   member: members[i],
                   service: _service,
-                  readOnly: widget.readOnly,
+                  readOnly: readOnly,
                   onEdit: () => _showEditMemberDialog(context, members[i]),
                   // 사역팀장 본인은 관리자만 소속을 변경할 수 있으므로 제거 대상에서 제외
-                  onRemoveFromMinistryTeam: widget.readOnly && !members[i].isMinistryLead
+                  onRemoveFromMinistryTeam: readOnly && !members[i].isMinistryLead
                       ? () => _confirmRemoveFromMinistryTeam(context, members[i])
                       : null,
-                  newFamilyWeek: _newFamilyWeek(members[i], attendance),
+                  newFamilyWeek: _newFamilyWeek(members[i], presentCounts),
                 ),
               );
             },
           );
         },
       ),
-      floatingActionButton: widget.readOnly
+      floatingActionButton: readOnly
           ? null
           : FloatingActionButton(
               onPressed: () => _showAddMemberDialog(context),
@@ -131,36 +136,26 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
 
   // 새가족팀 소속 일반 팀원(=새가족 본인, 리더/팀장 제외)의 출석 횟수 기준 진행 주차.
   // 새가족이 아니면 null을 반환해 일반 소속팀 라벨을 그대로 쓰도록 함
-  int? _newFamilyWeek(UserModel member, List<AttendanceModel> attendance) {
+  int? _newFamilyWeek(UserModel member, Map<String, int> presentCounts) {
     if (member.department != AppTeams.newFamilyTeam || member.role != UserRole.member) return null;
-    final count = attendance.where((a) => a.userId == member.uid && a.isPresent).length;
+    final count = presentCounts[member.uid] ?? 0;
     return count > AppTeams.newFamilyMaxWeeks ? AppTeams.newFamilyMaxWeeks : count;
   }
 
   // 사역팀(콘텐츠팀 등) 팀장이 본인 팀에서 팀원을 제거함. 이메일/소속팀(department)
   // 등 다른 회원 정보는 건드리지 않고 사역팀 소속(ministryTeam)만 해제함
   Future<void> _confirmRemoveFromMinistryTeam(BuildContext context, UserModel member) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('콘텐츠팀에서 제거'),
-        content: Text('${member.name}님을 콘텐츠팀에서 제거하시겠습니까?\n소속팀 등 다른 정보는 유지되고 콘텐츠팀 소속만 해제됩니다.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('제거'),
-          ),
-        ],
-      ),
+    final confirm = await confirmDestructiveAction(
+      context,
+      title: '콘텐츠팀에서 제거',
+      content: '${member.name}님을 콘텐츠팀에서 제거하시겠습니까?\n소속팀 등 다른 정보는 유지되고 콘텐츠팀 소속만 해제됩니다.',
+      confirmLabel: '제거',
     );
-    if (confirm != true) return;
-    await _service.updateUser(member.copyWith(
-      ministryTeam: '',
-      isMinistryLead: false,
-      bannerAccessGranted: false,
-    ));
+    if (!confirm) return;
+    await _service.updateUser(
+      member.copyWith(ministryTeam: '', isMinistryLead: false, bannerAccessGranted: false),
+      previousDepartment: member.department,
+    );
   }
 
   void _showFormatGuide() {
@@ -544,22 +539,12 @@ class _MemberTile extends StatelessWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('회원 삭제'),
-        content: Text('${member.name}님을 삭제하시겠습니까?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('삭제'),
-          ),
-        ],
-      ),
+    final confirm = await confirmDestructiveAction(
+      context,
+      title: '회원 삭제',
+      content: '${member.name}님을 삭제하시겠습니까?',
     );
-    if (confirm == true) {
+    if (confirm) {
       await service.deleteUser(member.uid);
     }
   }
@@ -657,7 +642,7 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           birthDate: _birthDate,
           cohort: cohort,
         );
-        await widget.service.updateUser(updated);
+        await widget.service.updateUser(updated, previousDepartment: widget.member!.department);
         // 본인 계정을 수정한 경우, 방금 저장한 값이 현재 세션의 AuthProvider
         // 캐시에도 즉시 반영되도록 함 (그렇지 않으면 재로그인 전까지 배너 관리
         // 권한 공유 등 변경 사항이 화면에 반영되지 않음)
@@ -694,6 +679,7 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     final canEditMinistryLead = auth.isAdmin;
     // 배너 관리 권한 공유(위임)는 관리자 또는 해당 사역팀 팀장만 가능
     final canShareBannerAccess = auth.canShareBannerAccess;
+    final canJoinMinistry = AppTeams.canJoinMinistryTeam(_role);
 
     return AlertDialog(
       title: Text(isEditing ? '회원 수정' : '회원 추가'),
@@ -769,20 +755,20 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: AppTeams.canJoinMinistryTeam(_role) ? _ministryTeam : '',
+                initialValue: canJoinMinistry ? _ministryTeam : '',
                 decoration: const InputDecoration(labelText: '사역팀 (선택)'),
                 items: [
                   const DropdownMenuItem(value: '', child: Text('없음')),
                   ...AppTeams.ministryTeams.map((t) => DropdownMenuItem(value: t, child: Text(t))),
                 ],
-                onChanged: !AppTeams.canJoinMinistryTeam(_role)
+                onChanged: !canJoinMinistry
                     ? null
                     : (v) => setState(() {
                           _ministryTeam = v ?? '';
                           if (_ministryTeam.isEmpty) _isMinistryLead = false;
                         }),
               ),
-              if (AppTeams.canJoinMinistryTeam(_role) && _ministryTeam.isNotEmpty)
+              if (canJoinMinistry && _ministryTeam.isNotEmpty)
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
@@ -791,9 +777,7 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
                   value: _isMinistryLead,
                   onChanged: canEditMinistryLead ? (v) => setState(() => _isMinistryLead = v ?? false) : null,
                 ),
-              if (AppTeams.canJoinMinistryTeam(_role) &&
-                  _ministryTeam == AppTeams.contentTeam &&
-                  !_isMinistryLead)
+              if (canJoinMinistry && _ministryTeam == AppTeams.contentTeam && !_isMinistryLead)
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,

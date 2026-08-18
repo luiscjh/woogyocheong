@@ -7,6 +7,7 @@ import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../models/pastor_request_model.dart';
 import '../../utils/constants.dart';
+import '../../widgets/warning_banner.dart';
 
 // 본인 역할을 스스로 양도할 수 있는 역할 (딱 해당 역할까지만 양도 가능)
 const _transferableRoles = [UserRole.smallLeader, UserRole.midLeader, UserRole.executive, UserRole.pastor];
@@ -81,17 +82,10 @@ class ProfileScreen extends StatelessWidget {
             ),
             if (context.watch<AuthProvider>().isCohortRestricted) ...[
               const SizedBox(height: 16),
-              Container(
+              const WarningBanner(
+                '현재 허용된 기수 범위가 아니라 조회만 가능한 상태입니다. 궁금한 점은 관리자에게 문의해 주세요.',
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  '현재 허용된 기수 범위가 아니라 조회만 가능한 상태입니다. 궁금한 점은 관리자에게 문의해 주세요.',
-                  style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600, fontSize: 13),
-                ),
+                fontSize: 13,
               ),
             ],
             if (user.email == _testAccountEmail) ...[
@@ -134,8 +128,8 @@ class ProfileScreen extends StatelessWidget {
 
   List<UserModel> _candidatesFor(UserModel me, List<UserModel> all) {
     // 목사님은 일반 회원이 아니라, 이미 목사님으로 등록된 사람에게만 양도 가능
-    if (me.role == UserRole.pastor) {
-      return all.where((m) => m.uid != me.uid && m.role == UserRole.pastor).toList();
+    if (me.isPastor) {
+      return all.where((m) => m.uid != me.uid && m.isPastor).toList();
     }
     final others = all.where((m) => m.uid != me.uid && m.role == UserRole.member);
     if (me.role == UserRole.smallLeader) {
@@ -363,6 +357,9 @@ class _RoleOption {
   const _RoleOption(this.label, this.role, this.department, {this.ministryTeam = '', this.isMinistryLead = false});
 
   String get key => '$role|$department|$ministryTeam|$isMinistryLead';
+
+  bool matches(UserModel u) =>
+      role == u.role && department == u.department && ministryTeam == u.ministryTeam && isMinistryLead == u.isMinistryLead;
 }
 
 const _testRoleOptions = [
@@ -386,18 +383,19 @@ class _TestRoleSwitcherSection extends StatelessWidget {
 
   const _TestRoleSwitcherSection({required this.user});
 
+  // 정확히 일치하는 옵션이 없으면 role+department, 그다음 role만 일치하는
+  // 옵션으로 순서대로 완화하며 찾고, 그마저 없으면 첫 옵션을 기본값으로 사용
   _RoleOption get _currentOption {
-    return _testRoleOptions.firstWhere(
-      (o) => o.role == user.role && o.department == user.department &&
-          o.ministryTeam == user.ministryTeam && o.isMinistryLead == user.isMinistryLead,
-      orElse: () => _testRoleOptions.firstWhere(
-        (o) => o.role == user.role && o.department == user.department,
-        orElse: () => _testRoleOptions.firstWhere(
-          (o) => o.role == user.role,
-          orElse: () => _testRoleOptions.first,
-        ),
-      ),
-    );
+    final matchers = <bool Function(_RoleOption)>[
+      (o) => o.matches(user),
+      (o) => o.role == user.role && o.department == user.department,
+      (o) => o.role == user.role,
+    ];
+    for (final matches in matchers) {
+      final found = _testRoleOptions.where(matches);
+      if (found.isNotEmpty) return found.first;
+    }
+    return _testRoleOptions.first;
   }
 
   @override
@@ -437,10 +435,7 @@ class _TestRoleSwitcherSection extends StatelessWidget {
   Future<void> _switchRole(BuildContext context, String? key) async {
     if (key == null) return;
     final option = _testRoleOptions.firstWhere((o) => o.key == key);
-    if (option.role == user.role && option.department == user.department &&
-        option.ministryTeam == user.ministryTeam && option.isMinistryLead == user.isMinistryLead) {
-      return;
-    }
+    if (option.matches(user)) return;
 
     final service = FirestoreService();
     // AuthProvider에 캐시된 user는 다른 화면(예: 회원 관리에서 관리자가 본인
@@ -456,7 +451,7 @@ class _TestRoleSwitcherSection extends StatelessWidget {
       bannerAccessGranted:
           option.ministryTeam == AppTeams.contentTeam && !option.isMinistryLead ? latest.bannerAccessGranted : false,
     );
-    await service.updateUser(updated);
+    await service.updateUser(updated, previousDepartment: latest.department);
     if (!context.mounted) return;
     context.read<AuthProvider>().setCurrentUser(updated);
     ScaffoldMessenger.of(context).showSnackBar(

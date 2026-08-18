@@ -67,7 +67,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         birthDate: _birthDate,
         cohort: int.parse(_cohortCtrl.text.trim()),
       );
-      await FirestoreService().updateUser(updated);
+      await FirestoreService().updateUser(updated, previousDepartment: user.department);
       if (!mounted) return;
       authProvider.setCurrentUser(updated);
     } finally {

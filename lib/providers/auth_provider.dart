@@ -26,6 +26,7 @@ class AuthProvider extends ChangeNotifier {
   // Google 최초 가입 시 소속(팀)을 아직 선택하지 않은 상태
   bool get needsOnboarding => _currentUser != null && _currentUser!.department.isEmpty;
 
+  bool get isPastor => _currentUser?.isPastor ?? false;
   bool get isAdmin => _currentUser?.isAdmin ?? false;
   bool get isExecutive => _currentUser?.isExecutive ?? false;
   bool get isMidLeader => _currentUser?.isMidLeader ?? false;
@@ -41,7 +42,7 @@ class AuthProvider extends ChangeNotifier {
   // 배너 관리 권한: 임원팀 이상이거나, 콘텐츠팀 팀장(고유 권한), 또는 팀장이
   // 직접 지정하여 권한을 공유받은 콘텐츠팀 팀원만 해당
   bool get canManageBanners =>
-      isExecutive || (inContentTeam && isMinistryLead) || (inContentTeam && (_currentUser?.bannerAccessGranted ?? false));
+      isExecutive || (inContentTeam && (isMinistryLead || (_currentUser?.bannerAccessGranted ?? false)));
   // 배너 관리 권한 "공유"(위임)를 실행할 수 있는지 여부: 관리자 또는 콘텐츠팀 팀장만 가능
   bool get canShareBannerAccess => isAdmin || (isMinistryLead && inContentTeam);
   // 회원 관리 권한: 소팀장 이상
@@ -59,7 +60,7 @@ class AuthProvider extends ChangeNotifier {
     final user = _currentUser;
     final settings = _settings;
     if (user == null || settings == null) return false;
-    if (user.role == UserRole.pastor) return false;
+    if (user.isPastor) return false;
     final cohort = user.cohort;
     if (cohort == null) return false;
     return cohort < settings.minAllowedCohort || cohort > settings.maxAllowedCohort;

@@ -65,10 +65,10 @@ class AdminDashboard extends StatelessWidget {
               title: '회원 조회',
               subtitle: '${user.ministryTeam} 팀원 명단 조회',
               color: AppColors.primary,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MemberManagementScreen(readOnly: true))),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MemberManagementScreen())),
             ),
           ],
-          if (user.role != UserRole.pastor && !auth.isSmallLeader && auth.isMinistryLead) ...[
+          if (!auth.isPastor && !auth.isSmallLeader && auth.isMinistryLead) ...[
             // 사역팀장(예: 콘텐츠팀)은 실제 중팀장 역할을 수행하지 않으므로
             // 출석 관리 대신 회의 일정 관리를 제공
             const SizedBox(height: 12),
@@ -79,7 +79,7 @@ class AdminDashboard extends StatelessWidget {
               color: Colors.blue,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MinistryMeetingScreen())),
             ),
-          ] else if (user.role != UserRole.pastor && auth.isSmallLeader) ...[
+          ] else if (!auth.isPastor && auth.isSmallLeader) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.check_circle_outline,
@@ -94,18 +94,18 @@ class AdminDashboard extends StatelessWidget {
             ),
           ],
           // 사역팀(콘텐츠팀) 팀장이 아닌 일반 팀원은 회의 일정을 조회만 할 수 있음
-          if (user.role != UserRole.pastor && auth.inContentTeam && !auth.isMinistryLead) ...[
+          if (!auth.isPastor && auth.inContentTeam && !auth.isMinistryLead) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.event_note_outlined,
               title: '회의 일정',
               subtitle: '${user.ministryTeam} 회의 일정 조회',
               color: Colors.blue,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MinistryMeetingScreen(readOnly: true))),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MinistryMeetingScreen())),
             ),
           ],
           // 회비 관리: 새가족팀은 팀장이 전담하고, 리더에게는 이 권한을 부여하지 않음
-          if (user.role != UserRole.pastor && auth.isSmallLeader &&
+          if (!auth.isPastor && auth.isSmallLeader &&
               !(user.department == AppTeams.newFamilyTeam && user.role == UserRole.smallLeader)) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
@@ -155,7 +155,7 @@ class AdminDashboard extends StatelessWidget {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewFamilyRotationManagementScreen())),
             ),
           ],
-          if (auth.canManageBanners && user.role != UserRole.pastor) ...[
+          if (auth.canManageBanners && !auth.isPastor) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.image_outlined,
@@ -165,7 +165,7 @@ class AdminDashboard extends StatelessWidget {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BannerManagementScreen())),
             ),
           ],
-          if (user.role == UserRole.pastor) ...[
+          if (auth.isPastor) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.schedule_outlined,

@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/attendance_model.dart';
 import '../../utils/constants.dart';
+import '../../widgets/warning_banner.dart';
 
 // 홈 하단 탭의 '출석' 화면: 역할과 무관하게 본인의 출석 여부만 확인/체크할 수 있음.
 // 팀 전체 출석 관리는 관리 탭의 '출석 관리'(AttendanceManagementScreen)에서 별도로 제공됨.
@@ -157,18 +158,10 @@ class _MemberAttendanceView extends StatelessWidget {
                   ],
                 )
               else
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    isCohortRestricted
-                        ? '허용된 기수 범위가 아니라 조회만 가능합니다.'
-                        : '출석체크는 주일(일요일)에만 가능합니다.',
-                    style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
-                  ),
+                WarningBanner(
+                  isCohortRestricted
+                      ? '허용된 기수 범위가 아니라 조회만 가능합니다.'
+                      : '출석체크는 주일(일요일)에만 가능합니다.',
                 ),
               const SizedBox(height: 40),
               _AttendanceHistory(userId: userId, service: service),

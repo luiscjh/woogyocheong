@@ -4,6 +4,7 @@ import '../../services/firestore_service.dart';
 import '../../models/pastor_request_model.dart';
 import '../../models/user_model.dart';
 import '../../utils/constants.dart';
+import '../../widgets/confirm_dialog.dart';
 
 class PastorRequestManagementScreen extends StatefulWidget {
   const PastorRequestManagementScreen({super.key});
@@ -261,26 +262,16 @@ class _RequestCard extends StatelessWidget {
   }
 
   Future<void> _reject(BuildContext context) async {
-    await service.rejectPastorRequest(request.id);
+    await service.rejectPastorRequest(request.id, requesterId: request.userId);
   }
 
   Future<void> _delete(BuildContext context) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('기록 삭제'),
-        content: Text('${request.userName}님의 ${_statusLabel(request.status)} 신청 기록을 삭제하시겠습니까?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('삭제'),
-          ),
-        ],
-      ),
+    final confirm = await confirmDestructiveAction(
+      context,
+      title: '기록 삭제',
+      content: '${request.userName}님의 ${_statusLabel(request.status)} 신청 기록을 삭제하시겠습니까?',
     );
-    if (confirm != true) return;
+    if (!confirm) return;
     await service.deletePastorRequest(request.id);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

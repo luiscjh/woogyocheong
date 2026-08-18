@@ -10,6 +10,7 @@ import '../../models/banner_model.dart';
 import '../../models/user_model.dart';
 import '../../utils/constants.dart';
 import '../../widgets/app_image.dart';
+import '../../widgets/confirm_dialog.dart';
 
 class BannerManagementScreen extends StatefulWidget {
   const BannerManagementScreen({super.key});
@@ -106,22 +107,12 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
   }
 
   Future<void> _deleteBanner(BannerModel banner) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('배너 삭제'),
-        content: Text('"${banner.title}" 배너를 삭제하시겠습니까?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('삭제'),
-          ),
-        ],
-      ),
+    final confirm = await confirmDestructiveAction(
+      context,
+      title: '배너 삭제',
+      content: '"${banner.title}" 배너를 삭제하시겠습니까?',
     );
-    if (confirm != true) return;
+    if (!confirm) return;
     await _firestore.deleteBanner(banner.id);
     await _storage.deleteFile(banner.imageUrl);
   }
@@ -160,7 +151,7 @@ class _BannerAccessShareDialog extends StatelessWidget {
 
   Future<void> _toggle(BuildContext context, UserModel member, bool granted) async {
     final updated = member.copyWith(bannerAccessGranted: granted);
-    await service.updateUser(updated);
+    await service.updateUser(updated, previousDepartment: member.department);
     if (!context.mounted) return;
     // 위임 대상이 마침 현재 로그인된 계정 본인이라면(테스트 계정 등) 세션에도 즉시 반영
     if (context.read<AuthProvider>().currentUser?.uid == updated.uid) {

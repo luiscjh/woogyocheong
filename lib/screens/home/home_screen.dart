@@ -36,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final authProvider = context.watch<AuthProvider>();
     final canManage = authProvider.canAccessAdminTab;
     // 목사님은 소팀 소속 회원이 아니므로 개인 출석 체크/회비 납부 탭이 필요 없음
-    final isPastor = authProvider.currentUser?.role == UserRole.pastor;
+    final isPastor = authProvider.isPastor;
 
     final pages = [
       _HomeTab(firestoreService: _firestoreService, onNavigate: _navigateTo, isPastor: isPastor),
