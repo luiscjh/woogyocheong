@@ -13,6 +13,7 @@ import '../fee/fee_management_screen.dart';
 import '../visit/visit_slot_management.dart';
 import 'ministry_meeting_screen.dart';
 import 'cohort_settings_screen.dart';
+import 'stats_dashboard_screen.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
@@ -43,6 +44,16 @@ class AdminDashboard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
+          if (auth.isAdmin) ...[
+            _AdminMenuCard(
+              icon: Icons.dashboard_outlined,
+              title: '실적 대시보드',
+              subtitle: '회원/출석/회비/심방 현황 요약',
+              color: Colors.deepPurple,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StatsDashboardScreen())),
+            ),
+            const SizedBox(height: 12),
+          ],
           // 회원 정보 수정(이메일·소속팀 변경 등) 권한: 관리자·임원팀(및 그 하위
           // 소팀장·중팀장 계층)만 보유. 콘텐츠팀 팀장은 수정 권한 없이 조회만 가능
           if (auth.isSmallLeader) ...[
