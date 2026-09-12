@@ -90,7 +90,9 @@ class _DashboardBody extends StatelessWidget {
     final leaderCount = members.where((m) => m.isSmallLeader).length;
     final newThisMonth =
         members.where((m) => m.joinDate.year == now.year && m.joinDate.month == now.month).length;
-    final newFamilyCount = members.where((m) => m.department == AppTeams.newFamilyTeam).length;
+    final newFamilyCount = members
+        .where((m) => m.department == AppTeams.newFamilyTeam && m.role == UserRole.member)
+        .length;
 
     final paidCount = members.where((m) => fees.any((f) => f.userId == m.uid && f.isPaid)).length;
     final feeRate = members.isEmpty ? 0.0 : paidCount / members.length;
@@ -116,7 +118,7 @@ class _DashboardBody extends StatelessWidget {
           children: [
             Expanded(child: _StatCard(label: '이번 달 신규가입', value: '$newThisMonth명', color: AppColors.success)),
             const SizedBox(width: 12),
-            Expanded(child: _StatCard(label: '새가족팀', value: '$newFamilyCount명', color: Colors.orange)),
+            Expanded(child: _StatCard(label: '새가족', value: '$newFamilyCount명', color: Colors.orange)),
           ],
         ),
         const SizedBox(height: 20),
