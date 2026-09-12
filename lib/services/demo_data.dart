@@ -55,10 +55,10 @@ class DemoData {
     UserModel(uid: 'newfamilyleader001', name: '장리더', email: 'leader1@church.com', phone: '010-6666-7777', role: 'small_leader', department: AppTeams.newFamilyTeam, joinDate: DateTime(2023, 3, 1)),
     UserModel(uid: 'newfamilyleader002', name: '윤리더', email: 'leader2@church.com', phone: '010-6666-8888', role: 'small_leader', department: AppTeams.newFamilyTeam, joinDate: DateTime(2023, 6, 1)),
     // 팀원
-    // cohort=19: 현재 기수(20) 허용 범위(11~20) 안 — 정상 이용 데모용
-    UserModel(uid: 'member001', name: '이청년', email: 'lee@church.com', phone: '010-2345-6789', role: 'member', department: 'A-1', joinDate: DateTime(2021, 3, 1), birthDate: DateTime(2001, 4, 12), cohort: 19),
-    // cohort=5: 현재 기수(20) 허용 범위(11~20) 밖 — 기수 제한(읽기 전용) 데모용
-    UserModel(uid: 'member002', name: '박믿음', email: 'park@church.com', phone: '010-3456-7890', role: 'member', department: 'A-2', joinDate: DateTime(2021, 6, 1), birthDate: DateTime(1994, 9, 3), cohort: 5),
+    // cohort=27: 2026년 허용 범위(24~30) 안 — 정상 이용 데모용
+    UserModel(uid: 'member001', name: '이청년', email: 'lee@church.com', phone: '010-2345-6789', role: 'member', department: 'A-1', joinDate: DateTime(2021, 3, 1), birthDate: DateTime(2001, 4, 12), cohort: 27),
+    // cohort=15: 2026년 허용 범위(24~30) 밖(너무 나이 많음) — 기수 제한(읽기 전용) 데모용
+    UserModel(uid: 'member002', name: '박믿음', email: 'park@church.com', phone: '010-3456-7890', role: 'member', department: 'A-2', joinDate: DateTime(2021, 6, 1), birthDate: DateTime(1994, 9, 3), cohort: 15),
     UserModel(uid: 'member003', name: '최소망', email: 'choi@church.com', phone: '010-4567-8901', role: 'member', department: 'A-1', joinDate: DateTime(2022, 1, 1)),
     UserModel(uid: 'member004', name: '정사랑', email: 'jung@church.com', phone: '010-5678-9012', role: 'member', department: 'B-1', joinDate: DateTime(2022, 3, 1)),
     UserModel(uid: 'member005', name: '강기쁨', email: 'kang@church.com', phone: '010-6789-0123', role: 'member', department: 'B-2', joinDate: DateTime(2022, 6, 1)),
@@ -93,7 +93,8 @@ class DemoData {
   final List<NotificationModel> _notifications = [];
 
   // 앱 전역 설정(단일 레코드) — 기수 기반 이용 제한 기준
-  AppSettingsModel _settings = const AppSettingsModel(minAllowedCohort: 11, maxAllowedCohort: 20);
+  // 2026년 기준 24~30기가 대상 → 2027년엔 자동으로 25~31기로 이동
+  AppSettingsModel _settings = const AppSettingsModel(baseYear: 2026, baseMinCohort: 24, baseMaxCohort: 30);
 
   // StreamControllers
   final _usersCtrl = StreamController<List<UserModel>>.broadcast();

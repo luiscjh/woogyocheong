@@ -480,13 +480,46 @@
     표시됨을 확인, 콘솔 에러 없음
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[8차 작업] 2026-09-13
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 기수 제한 설정 자동화 (연도별 자동 이동)
+  - 배경: 기수는 매년 1씩 올라가고(숫자가 높을수록 나이가 어림), 2026년
+    기준 24~30기가 대상 연령대인데 기존에는 관리자가 매년 min/max 숫자를
+    직접 다시 입력해야 했음 — 이를 자동화해달라는 요청
+  - lib/models/app_settings_model.dart: minAllowedCohort/maxAllowedCohort
+    절대값 저장 방식을 baseYear/baseMinCohort/baseMaxCohort 앵커 방식으로
+    변경. minAllowedCohortFor(year)/maxAllowedCohortFor(year) 계산 메서드
+    추가, 기존 minAllowedCohort/maxAllowedCohort는 DateTime.now().year
+    기준으로 자동 계산되는 게터로 유지 → auth_provider.dart 등 기존
+    호출부는 수정 없이 그대로 동작
+  - lib/screens/admin/cohort_settings_screen.dart: 입력 필드를 '기준
+    연도 + 그 연도의 최소/최대 허용 기수'로 변경. 저장해두면 이후
+    연도는 매번 재설정할 필요 없이 자동으로 범위가 이동. 화면에 올해
+    기준 자동 계산된 실제 허용 범위를 함께 표시
+  - lib/services/demo_data.dart: 데모 설정 앵커를 2026년 24~30기로
+    갱신. 이청년(기존 19기)을 27기로, 박믿음(기존 5기)을 15기로 변경해
+    새 범위 안/밖 데모 시나리오 유지
+  - flutter analyze 통과 확인
+  - 웹 실행(web-server) + claude-in-chrome으로 검증: 관리자 계정에서
+    기수 제한 설정 화면에 2026/24~30이 정상 표시되는지 확인, 기준
+    연도를 2025로 임시 변경해 올해(2026) 자동 계산 범위가 25~31로
+    +1 이동하는지 확인 후 2026/24~30으로 복구. 박믿음(15기) 로그인 시
+    "허용된 기수 범위가 아니라 조회만 가능합니다" 제한 문구 노출,
+    이청년(27기) 로그인 시 제한 문구 없이 정상 이용 가능함을 확인
+  - 참고: 이 프로젝트의 Flutter 웹은 CanvasKit 렌더러라 일반 마우스
+    휠 스크롤 이벤트가 씹힘 — flt-semantics-placeholder를 클릭(JS로
+    dispatch)해 접근성 시맨틱을 활성화한 뒤에야 스크롤이 정상 동작함
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [현재 상태]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   demoMode = true (Firebase 없이 인메모리 데이터로 실행 중)
   브랜치: main. 1~3차 작업은 커밋(6f6ed093), 4~5차 작업은 커밋
   (8153b6fa), 6차 작업은 커밋(41fdf9f5), 7차 작업은 커밋(062f969d,
-  b48f54f0)으로 각각 GitHub(origin/main) push 완료.
+  b48f54f0, 63811864)으로 각각 GitHub(origin/main) push 완료. 8차
+  작업은 이번 커밋으로 push 예정.
 
   웹 실행 명령:
     export PATH="$PATH:/Users/choejaehyeon/development/flutter/bin"
