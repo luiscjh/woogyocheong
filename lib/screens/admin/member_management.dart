@@ -514,7 +514,8 @@ class _MemberTile extends StatelessWidget {
           ],
         ),
         subtitle: Text(
-          '${newFamilyWeek != null ? '새가족 $newFamilyWeek주차' : AppTeams.deptLabel(member.department)} · ${member.email}',
+          '${newFamilyWeek != null ? '새가족 $newFamilyWeek주차' : AppTeams.deptLabel(member.department)} · '
+          '${member.cohort != null ? '${member.cohort}기' : '기수 미등록'}',
         ),
         trailing: readOnly
             ? (onRemoveFromMinistryTeam == null
