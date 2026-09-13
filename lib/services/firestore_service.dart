@@ -9,7 +9,6 @@ import '../models/new_family_rotation_model.dart';
 import '../models/banner_model.dart';
 import '../models/ministry_meeting_model.dart';
 import '../models/notification_model.dart';
-import '../models/app_settings_model.dart';
 import '../utils/constants.dart';
 import 'demo_data.dart';
 
@@ -367,17 +366,6 @@ class FirestoreService {
       'createdAt': Timestamp.fromDate(DateTime.now()),
       'isRead': false,
     });
-  }
-
-  // ── App Settings (기수 기반 이용 제한 기준) ─────────────────────────────
-  Stream<AppSettingsModel> streamAppSettings() {
-    if (demoMode) return _demo.streamAppSettings();
-    return _db.collection('settings').doc('app').snapshots().map(AppSettingsModel.fromFirestore);
-  }
-
-  Future<void> updateAppSettings(AppSettingsModel settings) async {
-    if (demoMode) { _demo.updateAppSettings(settings); return; }
-    await _db.collection('settings').doc('app').set(settings.toMap());
   }
 
   // ── Banners ───────────────────────────────────────────────────────────

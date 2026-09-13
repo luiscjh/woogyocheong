@@ -12,7 +12,6 @@ import '../attendance/attendance_management_screen.dart';
 import '../fee/fee_management_screen.dart';
 import '../visit/visit_slot_management.dart';
 import 'ministry_meeting_screen.dart';
-import 'cohort_settings_screen.dart';
 import 'stats_dashboard_screen.dart';
 
 class AdminDashboard extends StatelessWidget {
@@ -194,16 +193,6 @@ class AdminDashboard extends StatelessWidget {
               subtitle: '회원의 목사 권한 신청 승인/거절',
               color: Colors.brown,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PastorRequestManagementScreen())),
-            ),
-          ],
-          if (auth.isAdmin) ...[
-            const SizedBox(height: 12),
-            _AdminMenuCard(
-              icon: Icons.groups_2_outlined,
-              title: '기수 제한 설정',
-              subtitle: '허용 기수 범위를 벗어난 회원 조회 전용 전환',
-              color: Colors.indigo,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CohortSettingsScreen())),
             ),
           ],
         ],

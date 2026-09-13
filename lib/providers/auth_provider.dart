@@ -1,23 +1,18 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
-import '../models/app_settings_model.dart';
 import '../services/auth_service.dart';
 import '../services/demo_data.dart';
-import '../services/firestore_service.dart';
+import '../services/firestore_service.dart' show demoMode;
 import '../utils/constants.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated }
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
-  final FirestoreService _firestoreService = FirestoreService();
-  StreamSubscription<AppSettingsModel>? _settingsSub;
 
   AuthStatus _status = AuthStatus.initial;
   UserModel? _currentUser;
   String? _error;
-  AppSettingsModel? _settings;
 
   AuthStatus get status => _status;
   UserModel? get currentUser => _currentUser;
@@ -51,26 +46,20 @@ class AuthProvider extends ChangeNotifier {
   // 회의 일정을 조회할 수 있는 경우
   bool get canAccessAdminTab => canManageMembers || canManageBanners || inContentTeam;
 
-  AppSettingsModel? get appSettings => _settings;
-
   // 기수 기반 이용 제한 여부 — true이면 출석 체크/회비 납부/심방 신청 등 쓰기 동작이
-  // 막히고 조회만 가능함. 목사님은 예외이며, 기수가 아직 등록되지 않았거나(cohort==null)
-  // 설정값을 아직 못 불러온 경우에는 안전하게 제한하지 않음
+  // 막히고 조회만 가능함. 목사님은 예외이며, 기수가 아직 등록되지 않았으면(cohort==null)
+  // 안전하게 제한하지 않음. 허용 범위는 CohortPolicy에 고정된 기준 연도/범위를 바탕으로
+  // 매년 자동 계산됨(참고: lib/utils/constants.dart)
   bool get isCohortRestricted {
     final user = _currentUser;
-    final settings = _settings;
-    if (user == null || settings == null) return false;
+    if (user == null) return false;
     if (user.isPastor) return false;
     final cohort = user.cohort;
     if (cohort == null) return false;
-    return cohort < settings.minAllowedCohort || cohort > settings.maxAllowedCohort;
+    return cohort < CohortPolicy.minAllowedCohort || cohort > CohortPolicy.maxAllowedCohort;
   }
 
   AuthProvider() {
-    _settingsSub = _firestoreService.streamAppSettings().listen((settings) {
-      _settings = settings;
-      notifyListeners();
-    });
     if (demoMode) {
       // 데모 모드에서는 로그인 상태 변화를 AuthService의 스트림으로 감지
       _authService.authStateChanges.listen((_) async {
@@ -103,12 +92,6 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
       });
     }
-  }
-
-  @override
-  void dispose() {
-    _settingsSub?.cancel();
-    super.dispose();
   }
 
   Future<bool> signIn(String email, String password) async {

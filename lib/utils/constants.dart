@@ -94,6 +94,18 @@ class AppTeams {
   }
 }
 
+// 기수 기반 이용 제한 정책. 기수는 매년 1씩 자동으로 밀리므로(숫자가 높을수록
+// 나이가 어림), 기준 연도에 허용했던 범위만 고정해두면 이후 연도는 자동 계산된다.
+// 예: 2026년 24~30기 기준 -> 2027년엔 자동으로 25~31기
+class CohortPolicy {
+  static const baseYear = 2026;
+  static const baseMinCohort = 24;
+  static const baseMaxCohort = 30;
+
+  static int get minAllowedCohort => baseMinCohort + (DateTime.now().year - baseYear);
+  static int get maxAllowedCohort => baseMaxCohort + (DateTime.now().year - baseYear);
+}
+
 class VisitStatus {
   static const pending = 'pending';
   static const confirmed = 'confirmed';

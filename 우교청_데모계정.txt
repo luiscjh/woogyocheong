@@ -126,14 +126,15 @@
 
   - UserModel.birthDate(생년월일)/cohort(기수) 필드로 관리. 생년월일은
     기록용이고, 실제 이용 제한은 cohort(기수)만 기준으로 판단함
-  - 관리자(관리 탭 '기수 제한 설정' → lib/screens/admin/
-    cohort_settings_screen.dart)가 '기준 연도 + 그 연도의 허용 기수
-    범위(최소~최대)'를 입력해 AppSettingsModel(baseYear, baseMinCohort,
-    baseMaxCohort)로 저장. 기수는 매년 1씩 자동으로 밀리므로(숫자가
+  - 허용 기수 범위는 관리자 설정 화면 없이 lib/utils/constants.dart의
+    CohortPolicy(baseYear=2026, baseMinCohort=24, baseMaxCohort=30)에
+    고정값으로 박혀 있음. 기수는 매년 1씩 자동으로 밀리므로(숫자가
     높을수록 나이가 어림) 실제 적용되는 min/max는 올해 연도 기준으로
-    자동 계산됨(baseMinCohort + (올해 - baseYear)) — 매년 재설정할 필요
-    없음. 데모 기본값은 2026년 기준 24기~30기
-    (lib/models/app_settings_model.dart)
+    자동 계산됨(baseMinCohort + (올해 - baseYear)) — 코드를 수정하지
+    않는 한 관리자가 매년 따로 설정할 것이 없음. 예전엔 관리 탭에
+    '기수 제한 설정' 화면(admin/cohort_settings_screen.dart)이 있어
+    이 값을 Firestore에 저장/수정할 수 있었으나, 완전 자동화 요청에
+    따라 화면 자체를 제거하고 코드 상수로 대체함
   - 허용 범위를 벗어난 회원은 로그인은 되지만 출석 체크·회비 납부·
     심방 신청 등 쓰기 동작이 막히고 조회만 가능함(각 화면에 경고 문구
     표시, 심방 탭은 '심방 신청' FAB 자체가 숨겨짐). 목사님 역할은 이

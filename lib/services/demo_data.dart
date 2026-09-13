@@ -11,7 +11,6 @@ import '../models/new_family_rotation_model.dart';
 import '../models/banner_model.dart';
 import '../models/ministry_meeting_model.dart';
 import '../models/notification_model.dart';
-import '../models/app_settings_model.dart';
 import '../utils/constants.dart';
 
 // 싱글턴 인메모리 저장소 – 데모 모드에서 Firebase 대신 사용
@@ -92,10 +91,6 @@ class DemoData {
   final List<MinistryMeetingModel> _ministryMeetings = [];
   final List<NotificationModel> _notifications = [];
 
-  // 앱 전역 설정(단일 레코드) — 기수 기반 이용 제한 기준
-  // 2026년 기준 24~30기가 대상 → 2027년엔 자동으로 25~31기로 이동
-  AppSettingsModel _settings = const AppSettingsModel(baseYear: 2026, baseMinCohort: 24, baseMaxCohort: 30);
-
   // StreamControllers
   final _usersCtrl = StreamController<List<UserModel>>.broadcast();
   final _attendanceCtrl = StreamController<List<AttendanceModel>>.broadcast();
@@ -107,7 +102,6 @@ class DemoData {
   final _bannersCtrl = StreamController<List<BannerModel>>.broadcast();
   final _ministryMeetingsCtrl = StreamController<List<MinistryMeetingModel>>.broadcast();
   final _notificationsCtrl = StreamController<List<NotificationModel>>.broadcast();
-  final _settingsCtrl = StreamController<AppSettingsModel>.broadcast();
 
   void _initDemoData() {
     final now = DateTime.now();
@@ -541,17 +535,6 @@ class DemoData {
       }
     }
     _notificationsCtrl.add(_sortedNotifications());
-  }
-
-  // ── App Settings (기수 기반 이용 제한 기준) ──────────────────
-  Stream<AppSettingsModel> streamAppSettings() {
-    Future.microtask(() => _settingsCtrl.add(_settings));
-    return _settingsCtrl.stream;
-  }
-
-  void updateAppSettings(AppSettingsModel settings) {
-    _settings = settings;
-    _settingsCtrl.add(_settings);
   }
 
   // ── Banners ────────────────────────────────────────────────

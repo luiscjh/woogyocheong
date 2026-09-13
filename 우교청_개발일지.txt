@@ -542,6 +542,30 @@
   - 우교청_데모계정.txt 계정 표에 기수 열 추가, 'cohort 미설정' 관련
     안내 문구 갱신
 
+■ '기수 제한 설정' 관리 화면 자체를 제거하고 완전 자동화
+  - 배경: 이전에 만든 '기준 연도 + 그 연도 범위' 입력 화면조차 관리자가
+    건드릴 일이 없도록, 화면을 아예 없애고 코드에 고정값만 두고 싶다는
+    요청
+  - lib/utils/constants.dart: CohortPolicy 클래스 신규 — baseYear(2026)·
+    baseMinCohort(24)·baseMaxCohort(30) 상수와, 올해 기준으로 자동
+    계산되는 minAllowedCohort/maxAllowedCohort 게터를 제공. 값을 바꿔야
+    할 일이 생기면 이 상수만 코드에서 수정하면 됨(Firestore 저장 없음)
+  - lib/models/app_settings_model.dart, lib/screens/admin/
+    cohort_settings_screen.dart 삭제. FirestoreService/DemoData의
+    streamAppSettings·updateAppSettings 메서드 및 관련 필드/스트림
+    제거
+  - lib/providers/auth_provider.dart: appSettings 스트림 구독을 제거하고
+    isCohortRestricted가 CohortPolicy.minAllowedCohort/
+    maxAllowedCohort를 직접 참조하도록 변경 (동작은 기존과 동일, 값의
+    출처만 Firestore 문서 → 코드 상수로 바뀜)
+  - lib/screens/admin/admin_dashboard.dart: 관리 메뉴에서 '기수 제한
+    설정' 카드 제거
+  - flutter analyze 통과 확인
+  - 웹 실행 + claude-in-chrome으로 검증: 관리 메뉴에 '기수 제한 설정'
+    항목이 더 이상 없음을 확인. 김관리(10기, 허용 범위 24~30 밖)로
+    로그인해 여전히 제한 안내가 뜨는 것을 확인해 자동 계산 로직 자체는
+    화면 제거 후에도 그대로 동작함을 검증
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [현재 상태]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
