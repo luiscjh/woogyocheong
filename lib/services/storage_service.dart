@@ -25,7 +25,11 @@ class StorageService {
   }
 
   Future<void> deleteFile(String url) async {
-    if (demoMode) return;
+    if (demoMode) {
+      // 데모 모드에서 업로드했던 이미지도 실제 삭제처럼 메모리에서 함께 해제
+      DemoData.instance.removeImage(url);
+      return;
+    }
     try {
       await _storage.refFromURL(url).delete();
     } catch (_) {}

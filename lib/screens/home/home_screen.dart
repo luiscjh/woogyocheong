@@ -301,9 +301,13 @@ class _NewFamilyLeaderRotationBadge extends StatelessWidget {
                 final newFamilyMembers =
                     members.where((m) => m.department == AppTeams.newFamilyTeam && m.role == UserRole.member);
 
+                // 회원별 출석 횟수를 한 번만 집계해 두고 회원마다 조회만 하도록 함
+                // (회원마다 전체 출석 목록을 다시 훑으면 새가족이 많아질수록 느려짐)
+                final presentCounts = AttendanceModel.presentCountsByUser(attendance);
+
                 final matchedWeeks = <int>{};
                 for (final m in newFamilyMembers) {
-                  final count = attendance.where((a) => a.userId == m.uid && a.isPresent).length;
+                  final count = presentCounts[m.uid] ?? 0;
                   if (myWeeks.contains(count) && count >= 1 && count <= AppTeams.newFamilyMaxWeeks) {
                     matchedWeeks.add(count);
                   }

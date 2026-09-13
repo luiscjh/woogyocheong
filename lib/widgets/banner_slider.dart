@@ -18,7 +18,7 @@ class _BannerSliderState extends State<BannerSlider> {
   @override
   Widget build(BuildContext context) {
     if (widget.banners.isEmpty) {
-      return _EmptyBanner();
+      return const _EmptyBanner();
     }
     return Column(
       children: [
@@ -101,6 +101,8 @@ class _BannerItem extends StatelessWidget {
 }
 
 class _EmptyBanner extends StatelessWidget {
+  const _EmptyBanner();
+
   @override
   Widget build(BuildContext context) {
     return Container(

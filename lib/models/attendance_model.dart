@@ -49,4 +49,15 @@ class AttendanceModel {
   static String dateKey(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
+
+  // 회원별 출석("참석") 횟수를 한 번의 순회로 집계. 여러 화면에서 회원마다 전체
+  // 출석 목록을 반복 조회(O(n²))하는 대신, 이 결과(userId → 횟수)에서 조회하면
+  // 됨(O(n))
+  static Map<String, int> presentCountsByUser(List<AttendanceModel> attendance) {
+    final counts = <String, int>{};
+    for (final a in attendance) {
+      if (a.isPresent) counts[a.userId] = (counts[a.userId] ?? 0) + 1;
+    }
+    return counts;
+  }
 }

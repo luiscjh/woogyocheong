@@ -94,7 +94,9 @@ class _DashboardBody extends StatelessWidget {
         .where((m) => m.department == AppTeams.newFamilyTeam && m.role == UserRole.member)
         .length;
 
-    final paidCount = members.where((m) => fees.any((f) => f.userId == m.uid && f.isPaid)).length;
+    // 회원마다 전체 회비 목록을 다시 훑지 않도록, 납부 완료한 회원 id를 한 번만 모아 둠
+    final paidUserIds = {for (final f in fees) if (f.isPaid) f.userId};
+    final paidCount = members.where((m) => paidUserIds.contains(m.uid)).length;
     final feeRate = members.isEmpty ? 0.0 : paidCount / members.length;
 
     final visitCounts = <String, int>{};
@@ -194,6 +196,14 @@ class _AttendanceTrendCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 날짜별 출석 인원을 한 번의 순회로 집계해 두고, 날짜(주)마다 전체 출석
+    // 목록을 다시 훑지 않도록 함 (출석 기록이 많아질수록 느려지는 것을 방지)
+    final presentCountByKey = <String, int>{};
+    for (final a in attendance) {
+      if (!a.isPresent) continue;
+      final key = AttendanceModel.dateKey(a.date);
+      presentCountByKey[key] = (presentCountByKey[key] ?? 0) + 1;
+    }
     final dateKeys = attendance.map((a) => AttendanceModel.dateKey(a.date)).toSet().toList()..sort();
     final recentKeys = dateKeys.length > 4 ? dateKeys.sublist(dateKeys.length - 4) : dateKeys;
 
@@ -216,8 +226,7 @@ class _AttendanceTrendCard extends StatelessWidget {
             for (final key in recentKeys)
               _WeekBar(
                 dateLabel: key.substring(5), // MM-dd
-                rate: attendance.where((a) => AttendanceModel.dateKey(a.date) == key && a.isPresent).length /
-                    totalMembers,
+                rate: (presentCountByKey[key] ?? 0) / totalMembers,
               ),
           ],
         ),

@@ -34,6 +34,13 @@ class DemoData {
     return _imageCache[url.substring(6)];
   }
 
+  // 배너 삭제 등으로 더는 참조되지 않는 데모 업로드 이미지를 메모리에서 해제
+  // (해제하지 않으면 데모를 오래 켜둘수록 _imageCache가 계속 쌓여 메모리를 낭비함)
+  void removeImage(String url) {
+    if (!url.startsWith('mem://')) return;
+    _imageCache.remove(url.substring(6));
+  }
+
   final List<UserModel> _users = [
     UserModel(uid: 'admin001', name: '김관리', email: 'admin@church.com', phone: '010-1234-5678', role: 'admin', department: 'A-1', joinDate: DateTime(2020, 1, 1), cohort: 10),
     // 목사님 (관리자와 동일한 권한 + 심방 신청 내용은 목사님과 신청자 본인만 조회 가능)

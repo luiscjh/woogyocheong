@@ -100,10 +100,7 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
             builder: (ctx, attSnap) {
               // 회원별 출석 횟수를 한 번만 집계해 두고 행마다 조회만 하도록 함
               // (행마다 전체 출석 목록을 다시 훑으면 회원이 많아질수록 느려짐)
-              final presentCounts = <String, int>{};
-              for (final a in attSnap.data ?? <AttendanceModel>[]) {
-                if (a.isPresent) presentCounts[a.userId] = (presentCounts[a.userId] ?? 0) + 1;
-              }
+              final presentCounts = AttendanceModel.presentCountsByUser(attSnap.data ?? <AttendanceModel>[]);
               return ListView.builder(
                 padding: const EdgeInsets.all(12),
                 itemCount: members.length,
@@ -400,9 +397,12 @@ class _LeaderAssignedFamilyView extends StatelessWidget {
                   final newFamilyMembers = members
                       .where((m) => m.department == AppTeams.newFamilyTeam && m.role == UserRole.member)
                       .toList();
+                  // 회원별 출석 횟수를 한 번만 집계해 두고 회원마다 조회만 하도록 함
+                  // (회원마다 전체 출석 목록을 다시 훑으면 새가족이 많아질수록 느려짐)
+                  final presentCounts = AttendanceModel.presentCountsByUser(attendance);
                   final weekOf = <String, int>{};
                   for (final m in newFamilyMembers) {
-                    final count = attendance.where((a) => a.userId == m.uid && a.isPresent).length;
+                    final count = presentCounts[m.uid] ?? 0;
                     if (count >= 1 && count <= AppTeams.newFamilyMaxWeeks) {
                       weekOf[m.uid] = count;
                     }
