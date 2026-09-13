@@ -5,31 +5,31 @@
 출처 : lib/services/demo_data.dart (_users 목록)
 비밀번호 : 데모 모드라 4자 이상이면 아무 값이나 입력하면 로그인됨
 
-이름     | 이메일                    | 역할    | 소속팀
----------|---------------------------|---------|----------------
-김관리   | admin@church.com          | 관리자  | A-1
-최목사   | pastor@church.com         | 목사님  | A-1
-이임원   | exec@church.com           | 임원팀  | 임원팀
-박임원   | execb@church.com          | 임원팀  | 임원팀
-박중팀   | mid@church.com            | 중팀장  | A-0 (A중팀)
-최중팀   | midb@church.com           | 중팀장  | B-0 (B중팀)
-정소팀   | small@church.com          | 소팀장  | A-1
-한소팀   | smallb@church.com         | 소팀장  | A-2
-오새가족 | newfamily@church.com      | 중팀장  | 새가족팀 (새가족팀장 - 중팀장급 권한, 1~3주차 담당 리더 배정 가능)
-장리더   | leader1@church.com        | 소팀장  | 새가족팀 (새가족팀 리더 - 소팀장급 권한, 2주차 담당)
-윤리더   | leader2@church.com        | 소팀장  | 새가족팀 (새가족팀 리더 - 소팀장급 권한, 1주차 담당)
-이청년   | lee@church.com            | 팀원    | A-1 (27기 - 2026년 허용 범위(24~30기) 안, 정상 이용 데모용)
-박믿음   | park@church.com           | 팀원    | A-2 (15기 - 2026년 허용 범위(24~30기) 밖, 기수 제한 데모용)
-최소망   | choi@church.com           | 팀원    | A-1
-정사랑   | jung@church.com           | 팀원    | B-1
-강기쁨   | kang@church.com           | 팀원    | B-2
-김새싹   | newbie1@church.com        | 팀원    | 새가족팀 (출석 1회, '1주차' 배지 - 윤리더 담당 주차 매칭용)
-이새록   | newbie2@church.com        | 팀원    | 새가족팀 (출석 2회, '2주차' 배지 - 장리더 담당 주차 매칭용)
-박새순   | newbie3@church.com        | 팀원    | 새가족팀 (출석 0회, '0주차' 배지)
-한새길   | newbie4@church.com        | 팀원    | 새가족팀 (출석 3회, '3주차' 배지 - 3주차는 담당 리더 미배정 상태 시연용)
-김콘텐츠 | content@church.com        | 팀원    | A-1 (사역팀=콘텐츠팀 팀장, 아래 별도 안내 참고)
-이콘텐츠 | content2@church.com       | 팀원    | D-4 (사역팀=콘텐츠팀 팀원, 아래 별도 안내 참고)
-테스트유저 | testing@church.com      | (자유 전환) | A-1
+이름     | 이메일                    | 역할    | 기수 | 소속팀
+---------|---------------------------|---------|------|----------------
+김관리   | admin@church.com          | 관리자  | 10기 | A-1
+최목사   | pastor@church.com         | 목사님  | 6기  | A-1
+이임원   | exec@church.com           | 임원팀  | 12기 | 임원팀
+박임원   | execb@church.com          | 임원팀  | 13기 | 임원팀
+박중팀   | mid@church.com            | 중팀장  | 17기 | A-0 (A중팀)
+최중팀   | midb@church.com           | 중팀장  | 18기 | B-0 (B중팀)
+정소팀   | small@church.com          | 소팀장  | 21기 | A-1
+한소팀   | smallb@church.com         | 소팀장  | 22기 | A-2
+오새가족 | newfamily@church.com      | 중팀장  | 25기 | 새가족팀 (새가족팀장 - 중팀장급 권한, 1~3주차 담당 리더 배정 가능)
+장리더   | leader1@church.com        | 소팀장  | 26기 | 새가족팀 (새가족팀 리더 - 소팀장급 권한, 2주차 담당)
+윤리더   | leader2@church.com        | 소팀장  | 27기 | 새가족팀 (새가족팀 리더 - 소팀장급 권한, 1주차 담당)
+이청년   | lee@church.com            | 팀원    | 27기 | A-1 (2026년 허용 범위(24~30기) 안, 정상 이용 데모용)
+박믿음   | park@church.com           | 팀원    | 15기 | A-2 (2026년 허용 범위(24~30기) 밖, 기수 제한 데모용)
+최소망   | choi@church.com           | 팀원    | 23기 | A-1
+정사랑   | jung@church.com           | 팀원    | 24기 | B-1
+강기쁨   | kang@church.com           | 팀원    | 25기 | B-2
+김새싹   | newbie1@church.com        | 팀원    | 30기 | 새가족팀 (출석 1회, '1주차' 배지 - 윤리더 담당 주차 매칭용)
+이새록   | newbie2@church.com        | 팀원    | 30기 | 새가족팀 (출석 2회, '2주차' 배지 - 장리더 담당 주차 매칭용)
+박새순   | newbie3@church.com        | 팀원    | 29기 | 새가족팀 (출석 0회, '0주차' 배지)
+한새길   | newbie4@church.com        | 팀원    | 28기 | 새가족팀 (출석 3회, '3주차' 배지 - 3주차는 담당 리더 미배정 상태 시연용)
+김콘텐츠 | content@church.com        | 팀원    | 27기 | A-1 (사역팀=콘텐츠팀 팀장, 아래 별도 안내 참고)
+이콘텐츠 | content2@church.com       | 팀원    | 28기 | D-4 (사역팀=콘텐츠팀 팀원, 아래 별도 안내 참고)
+테스트유저 | testing@church.com      | (자유 전환) | 20기 | A-1
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [테스트 전용 계정 안내]
@@ -139,7 +139,8 @@
     표시, 심방 탭은 '심방 신청' FAB 자체가 숨겨짐). 목사님 역할은 이
     제한에서 완전히 제외됨 (AuthProvider.isCohortRestricted)
   - cohort가 아직 등록되지 않은(null) 회원은 안전하게 제한 대상에서
-    제외됨 — 대부분의 기존 데모 계정은 cohort 미설정 상태
+    제외됨. 데모 계정은 전원 cohort가 설정되어 있어 이 케이스를 보려면
+    회원 관리 화면에서 특정 회원의 기수를 지운 뒤 확인하면 됨
   - 회원 정보 수정(생년월일/기수 포함)은 관리자·임원팀만 회원 관리
     화면에서 설정 가능 (lib/screens/admin/member_management.dart)
   - Google 최초 가입 온보딩 화면에서도 이름/팀과 함께 생년월일·기수를

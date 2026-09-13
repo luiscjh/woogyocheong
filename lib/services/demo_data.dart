@@ -36,50 +36,50 @@ class DemoData {
   }
 
   final List<UserModel> _users = [
-    UserModel(uid: 'admin001', name: '김관리', email: 'admin@church.com', phone: '010-1234-5678', role: 'admin', department: 'A-1', joinDate: DateTime(2020, 1, 1)),
+    UserModel(uid: 'admin001', name: '김관리', email: 'admin@church.com', phone: '010-1234-5678', role: 'admin', department: 'A-1', joinDate: DateTime(2020, 1, 1), cohort: 10),
     // 목사님 (관리자와 동일한 권한 + 심방 신청 내용은 목사님과 신청자 본인만 조회 가능)
-    UserModel(uid: 'pastor001', name: '최목사', email: 'pastor@church.com', phone: '010-0000-1111', role: 'pastor', department: 'A-1', joinDate: DateTime(2019, 1, 1)),
+    UserModel(uid: 'pastor001', name: '최목사', email: 'pastor@church.com', phone: '010-0000-1111', role: 'pastor', department: 'A-1', joinDate: DateTime(2019, 1, 1), cohort: 6),
     // 임원팀 (소팀 없이 임원팀 자체가 소속팀)
-    UserModel(uid: 'exec001', name: '이임원', email: 'exec@church.com', phone: '010-1111-2222', role: 'executive', department: AppTeams.executiveTeam, joinDate: DateTime(2020, 6, 1)),
-    UserModel(uid: 'exec002', name: '박임원', email: 'execb@church.com', phone: '010-1111-3333', role: 'executive', department: AppTeams.executiveTeam, joinDate: DateTime(2020, 6, 1)),
+    UserModel(uid: 'exec001', name: '이임원', email: 'exec@church.com', phone: '010-1111-2222', role: 'executive', department: AppTeams.executiveTeam, joinDate: DateTime(2020, 6, 1), cohort: 12),
+    UserModel(uid: 'exec002', name: '박임원', email: 'execb@church.com', phone: '010-1111-3333', role: 'executive', department: AppTeams.executiveTeam, joinDate: DateTime(2020, 6, 1), cohort: 13),
     // 중팀장
-    UserModel(uid: 'mid001', name: '박중팀', email: 'mid@church.com', phone: '010-2222-3333', role: 'mid_leader', department: 'A-0', joinDate: DateTime(2021, 1, 1)),
-    UserModel(uid: 'mid002', name: '최중팀', email: 'midb@church.com', phone: '010-3333-4444', role: 'mid_leader', department: 'B-0', joinDate: DateTime(2021, 1, 1)),
+    UserModel(uid: 'mid001', name: '박중팀', email: 'mid@church.com', phone: '010-2222-3333', role: 'mid_leader', department: 'A-0', joinDate: DateTime(2021, 1, 1), cohort: 17),
+    UserModel(uid: 'mid002', name: '최중팀', email: 'midb@church.com', phone: '010-3333-4444', role: 'mid_leader', department: 'B-0', joinDate: DateTime(2021, 1, 1), cohort: 18),
     // 소팀장
-    UserModel(uid: 'small001', name: '정소팀', email: 'small@church.com', phone: '010-4444-5555', role: 'small_leader', department: 'A-1', joinDate: DateTime(2021, 6, 1)),
-    UserModel(uid: 'small002', name: '한소팀', email: 'smallb@church.com', phone: '010-5555-6666', role: 'small_leader', department: 'A-2', joinDate: DateTime(2021, 6, 1)),
+    UserModel(uid: 'small001', name: '정소팀', email: 'small@church.com', phone: '010-4444-5555', role: 'small_leader', department: 'A-1', joinDate: DateTime(2021, 6, 1), cohort: 21),
+    UserModel(uid: 'small002', name: '한소팀', email: 'smallb@church.com', phone: '010-5555-6666', role: 'small_leader', department: 'A-2', joinDate: DateTime(2021, 6, 1), cohort: 22),
     // 새가족팀 (중팀에 속하지 않는 독립된 소팀)
     // 새가족팀장: 중팀장과 동일한 권한 수준. 로테이션 명단 등록 권한 보유
-    UserModel(uid: 'newfamilyhead001', name: '오새가족', email: 'newfamily@church.com', phone: '010-7777-8888', role: 'mid_leader', department: AppTeams.newFamilyTeam, joinDate: DateTime(2023, 1, 1)),
+    UserModel(uid: 'newfamilyhead001', name: '오새가족', email: 'newfamily@church.com', phone: '010-7777-8888', role: 'mid_leader', department: AppTeams.newFamilyTeam, joinDate: DateTime(2023, 1, 1), cohort: 25),
     // 새가족팀 리더: 소팀장과 동일한 권한 수준. 주차별로 로테이션하며 새가족 나눔 모임을 이끔
-    UserModel(uid: 'newfamilyleader001', name: '장리더', email: 'leader1@church.com', phone: '010-6666-7777', role: 'small_leader', department: AppTeams.newFamilyTeam, joinDate: DateTime(2023, 3, 1)),
-    UserModel(uid: 'newfamilyleader002', name: '윤리더', email: 'leader2@church.com', phone: '010-6666-8888', role: 'small_leader', department: AppTeams.newFamilyTeam, joinDate: DateTime(2023, 6, 1)),
+    UserModel(uid: 'newfamilyleader001', name: '장리더', email: 'leader1@church.com', phone: '010-6666-7777', role: 'small_leader', department: AppTeams.newFamilyTeam, joinDate: DateTime(2023, 3, 1), cohort: 26),
+    UserModel(uid: 'newfamilyleader002', name: '윤리더', email: 'leader2@church.com', phone: '010-6666-8888', role: 'small_leader', department: AppTeams.newFamilyTeam, joinDate: DateTime(2023, 6, 1), cohort: 27),
     // 팀원
     // cohort=27: 2026년 허용 범위(24~30) 안 — 정상 이용 데모용
     UserModel(uid: 'member001', name: '이청년', email: 'lee@church.com', phone: '010-2345-6789', role: 'member', department: 'A-1', joinDate: DateTime(2021, 3, 1), birthDate: DateTime(2001, 4, 12), cohort: 27),
     // cohort=15: 2026년 허용 범위(24~30) 밖(너무 나이 많음) — 기수 제한(읽기 전용) 데모용
     UserModel(uid: 'member002', name: '박믿음', email: 'park@church.com', phone: '010-3456-7890', role: 'member', department: 'A-2', joinDate: DateTime(2021, 6, 1), birthDate: DateTime(1994, 9, 3), cohort: 15),
-    UserModel(uid: 'member003', name: '최소망', email: 'choi@church.com', phone: '010-4567-8901', role: 'member', department: 'A-1', joinDate: DateTime(2022, 1, 1)),
-    UserModel(uid: 'member004', name: '정사랑', email: 'jung@church.com', phone: '010-5678-9012', role: 'member', department: 'B-1', joinDate: DateTime(2022, 3, 1)),
-    UserModel(uid: 'member005', name: '강기쁨', email: 'kang@church.com', phone: '010-6789-0123', role: 'member', department: 'B-2', joinDate: DateTime(2022, 6, 1)),
+    UserModel(uid: 'member003', name: '최소망', email: 'choi@church.com', phone: '010-4567-8901', role: 'member', department: 'A-1', joinDate: DateTime(2022, 1, 1), cohort: 23),
+    UserModel(uid: 'member004', name: '정사랑', email: 'jung@church.com', phone: '010-5678-9012', role: 'member', department: 'B-1', joinDate: DateTime(2022, 3, 1), cohort: 24),
+    UserModel(uid: 'member005', name: '강기쁨', email: 'kang@church.com', phone: '010-6789-0123', role: 'member', department: 'B-2', joinDate: DateTime(2022, 6, 1), cohort: 25),
     // 새가족팀 팀원 - 출석 1회: 1주차 담당 리더 매칭 확인용
-    UserModel(uid: 'member006', name: '김새싹', email: 'newbie1@church.com', phone: '010-8888-9999', role: 'member', department: AppTeams.newFamilyTeam, joinDate: DateTime(2026, 6, 1)),
+    UserModel(uid: 'member006', name: '김새싹', email: 'newbie1@church.com', phone: '010-8888-9999', role: 'member', department: AppTeams.newFamilyTeam, joinDate: DateTime(2026, 6, 1), cohort: 30),
     // 새가족팀 팀원 - 출석 2회: 2주차 담당 리더 매칭 확인용
-    UserModel(uid: 'member007', name: '이새록', email: 'newbie2@church.com', phone: '010-9999-0000', role: 'member', department: AppTeams.newFamilyTeam, joinDate: DateTime(2026, 6, 15)),
+    UserModel(uid: 'member007', name: '이새록', email: 'newbie2@church.com', phone: '010-9999-0000', role: 'member', department: AppTeams.newFamilyTeam, joinDate: DateTime(2026, 6, 15), cohort: 30),
     // 새가족팀 팀원 - 출석 0회(갓 가입) 상태, 홈 화면 'n주차' 배지의 0주차 케이스 확인용
-    UserModel(uid: 'member008', name: '박새순', email: 'newbie3@church.com', phone: '010-1010-2020', role: 'member', department: AppTeams.newFamilyTeam, joinDate: DateTime.now()),
+    UserModel(uid: 'member008', name: '박새순', email: 'newbie3@church.com', phone: '010-1010-2020', role: 'member', department: AppTeams.newFamilyTeam, joinDate: DateTime.now(), cohort: 29),
     // 새가족팀 팀원 - 출석 3회: 3주차 담당 리더 매칭 확인용
-    UserModel(uid: 'member009', name: '한새길', email: 'newbie4@church.com', phone: '010-1111-2020', role: 'member', department: AppTeams.newFamilyTeam, joinDate: DateTime(2026, 5, 1)),
+    UserModel(uid: 'member009', name: '한새길', email: 'newbie4@church.com', phone: '010-1111-2020', role: 'member', department: AppTeams.newFamilyTeam, joinDate: DateTime(2026, 5, 1), cohort: 28),
     // 콘텐츠팀(사역팀) 팀장 - department(A-1)는 그대로 유지한 채 ministryTeam만
     // 별도로 부여됨. 배너 관리 + 사역팀 회원 관리 + 회의 일정 관리 권한 보유
     // (소팀장 현황·회비 관리는 실제 중팀장 역할이 아니므로 제외됨. AuthProvider 참고)
-    UserModel(uid: 'content001', name: '김콘텐츠', email: 'content@church.com', phone: '010-1212-3434', role: 'member', department: 'A-1', joinDate: DateTime(2024, 1, 1), ministryTeam: AppTeams.contentTeam, isMinistryLead: true),
+    UserModel(uid: 'content001', name: '김콘텐츠', email: 'content@church.com', phone: '010-1212-3434', role: 'member', department: 'A-1', joinDate: DateTime(2024, 1, 1), ministryTeam: AppTeams.contentTeam, isMinistryLead: true, cohort: 27),
     // 콘텐츠팀(사역팀) 팀원 - 팀장이 아닌 일반 팀원. department는 실제 소속 소팀(D-4)을
     // 그대로 유지한 채 ministryTeam만 추가로 부여됨. 배너 관리 권한은 팀장이 지정
     // 해야만 부여되므로 기본값(false)을 유지
-    UserModel(uid: 'content002', name: '이콘텐츠', email: 'content2@church.com', phone: '010-1212-5656', role: 'member', department: 'D-4', joinDate: DateTime(2024, 3, 1), ministryTeam: AppTeams.contentTeam),
+    UserModel(uid: 'content002', name: '이콘텐츠', email: 'content2@church.com', phone: '010-1212-5656', role: 'member', department: 'D-4', joinDate: DateTime(2024, 3, 1), ministryTeam: AppTeams.contentTeam, cohort: 28),
     // 테스트 계정: 내 정보 화면에서 관리자~팀원 역할을 자유롭게 전환하며 테스트 가능
-    UserModel(uid: 'testing001', name: '테스트유저', email: 'testing@church.com', phone: '010-0000-0000', role: 'admin', department: 'A-1', joinDate: DateTime(2026, 1, 1)),
+    UserModel(uid: 'testing001', name: '테스트유저', email: 'testing@church.com', phone: '010-0000-0000', role: 'admin', department: 'A-1', joinDate: DateTime(2026, 1, 1), cohort: 20),
   ];
 
   final List<AttendanceModel> _attendance = [];
