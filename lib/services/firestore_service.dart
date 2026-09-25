@@ -13,7 +13,7 @@ import '../utils/constants.dart';
 import 'demo_data.dart';
 
 // demoMode = true 이면 Firebase 없이 인메모리 저장소를 사용
-const bool demoMode = true;
+const bool demoMode = false;
 
 class FirestoreService {
   FirebaseFirestore get _db => FirebaseFirestore.instance;

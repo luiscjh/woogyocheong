@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:excel/excel.dart';
 import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -51,7 +49,7 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.upload_file),
-                  tooltip: '엑셀/CSV 가져오기',
+                  tooltip: 'CSV 가져오기',
                   onPressed: _importFile,
                 ),
               ],
@@ -165,7 +163,7 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('지원 형식: .xlsx, .xls, .csv', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('지원 형식: .csv', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 12),
               Text('열 순서 (첫 번째 행은 헤더):'),
               SizedBox(height: 6),
@@ -195,7 +193,7 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
   Future<void> _importFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['xlsx', 'xls', 'csv'],
+      allowedExtensions: ['csv'],
       withData: true, // 웹 호환: bytes로 직접 읽기
     );
     if (result == null) return;
@@ -205,12 +203,9 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
     if (bytes == null) return;
 
     try {
-      final ext = file.extension?.toLowerCase();
       // String.fromCharCodes는 UTF-8을 디코딩하지 않고 바이트를 그대로 문자
       // 코드로 취급해 한글(3바이트 문자)이 깨지므로 반드시 utf8.decode 사용
-      final members = ext == 'csv'
-          ? _parseCsv(utf8.decode(bytes, allowMalformed: true))
-          : _parseExcel(bytes);
+      final members = _parseCsv(utf8.decode(bytes, allowMalformed: true));
 
       if (members.isEmpty) {
         if (mounted) {
@@ -251,36 +246,6 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
         );
       }
     }
-  }
-
-  List<UserModel> _parseExcel(Uint8List bytes) {
-    final excel = Excel.decodeBytes(bytes);
-    final sheet = excel.tables.values.first;
-    final members = <UserModel>[];
-
-    // 컬럼: A=이름, B=팀/부서, C=전화번호, D=이메일
-    for (var i = 1; i < sheet.rows.length; i++) {
-      final row = sheet.rows[i];
-      if (row.isEmpty || row[0]?.value == null) continue;
-
-      final name = row[0]?.value?.toString().trim() ?? '';
-      final dept = row.length > 1 ? (row[1]?.value?.toString().trim() ?? '') : '';
-      final phone = row.length > 2 ? (row[2]?.value?.toString().trim() ?? '') : '';
-      final email = row.length > 3 ? (row[3]?.value?.toString().trim() ?? '') : '';
-
-      if (name.isEmpty) continue;
-
-      members.add(UserModel(
-        uid: const Uuid().v4(),
-        name: name,
-        email: email,
-        phone: phone,
-        role: 'member',
-        department: dept,
-        joinDate: DateTime.now(),
-      ));
-    }
-    return members;
   }
 
   List<UserModel> _parseCsv(String content) {

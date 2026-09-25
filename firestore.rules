@@ -1,0 +1,158 @@
+rules_version = '2';
+
+// 우교청 Firestore 보안 규칙
+//
+// 설계 원칙:
+// - 읽기: 이 앱은 작은 청년부 커뮤니티용이고, 홈 화면 배지/실적 대시보드 등
+//   여러 화면이 역할과 무관하게 전체 컬렉션을 구독하므로, 로그인한 사용자라면
+//   대부분의 컬렉션을 폭넓게 읽을 수 있게 했다. 대신 "쓰기"를 역할별로 엄격히 제한해
+//   변조·권한 상승을 막는 데 집중한다.
+// - 계정 생성은 Google 로그인만 지원한다(이메일/비밀번호로 실제 가입하는 경로는
+//   앱에 없음). 최초 로그인 시 본인 uid로, role=member/department='' 상태로만
+//   스스로 users 문서를 만들 수 있다.
+// - role 필드(권한 승급)는 반드시 관리자(admin/pastor)만 바꿀 수 있다. 클라이언트
+//   UI는 소팀장 이상이면 아무 회원의 role이나 바꿀 수 있게 되어 있지만(멤버 관리
+//   화면), 실제 배포에서는 이를 그대로 허용하지 않고 서버 규칙에서 더 엄격하게
+//   막았다 — 이름/연락처/소속팀 등 일반 정보는 소팀장 이상이 계속 관리할 수 있다.
+// - testing@church.com 계정은 QA 목적으로 본인 role만 스스로 전환할 수 있게 예외를
+//   둔다(프로필 화면의 "테스트 계정 - 역할 전환" 기능과 짝을 이룸). 이 예외가 안전하려면
+//   실제로 그 계정이 먼저 만들어져 있어야 한다(Firebase Auth는 프로젝트 내 이메일 유일성을
+//   보장하므로, 규칙 배포와 함께/직후에 이 계정을 만들어 선점해 둘 것).
+// - 신규 가입 온보딩(소속팀 최초 등록), 콘텐츠팀 팀장의 배너 권한 위임, 역할 양도
+//   (transferRole)처럼 본인 role을 유지한 채 자기 문서 또는 특정 조건의 타인 문서를
+//   갱신해야 하는 정상 흐름을 위한 예외를 users 컬렉션에 별도로 뒀다. 역할 양도는
+//   두 번의 독립된 update(대상자 role 승격 + 본인 role 강등)로 이뤄지는데, 앱이
+//   이를 트랜잭션으로 묶지 않으므로 두 번째 쓰기가 실패하면 두 사람이 같은 역할을
+//   동시에 갖는 상태가 남을 수 있다 — 추후 WriteBatch로 원자화하는 것을 권장한다.
+// - 알려진 단순화: 소팀장이 "본인 소팀"만 수정할 수 있어야 하는 세부 제약(부서 일치
+//   검사)은 여기서 강제하지 않았다. 지금은 소팀장 이상이면 누구나 출석/회비/명단을
+//   수정할 수 있다 — 다른 팀 기록까지 건드릴 수 있다는 뜻이므로, 추후 부서 일치
+//   검사를 추가하는 것을 권장한다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── 역할 판정 헬퍼 ──────────────────────────────────────────────
+    function isSignedIn() { return request.auth != null; }
+
+    function isRegistered() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function myData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() { return isRegistered() && myData().role in ['admin', 'pastor']; }
+    function isExecutive() { return isAdmin() || (isRegistered() && myData().role == 'executive'); }
+    function isMidLeader() { return isExecutive() || (isRegistered() && myData().role == 'mid_leader'); }
+    function isSmallLeader() { return isMidLeader() || (isRegistered() && myData().role == 'small_leader'); }
+
+    function isTestAccount() { return isSignedIn() && request.auth.token.email == 'testing@church.com'; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+
+    // lib/providers/auth_provider.dart의 canManageBanners와 동일한 조건
+    function canManageBanners() {
+      return isExecutive() ||
+        (isRegistered() && myData().ministryTeam == '콘텐츠팀' &&
+         (myData().isMinistryLead == true || myData().bannerAccessGranted == true));
+    }
+    // 콘텐츠팀 팀장(role은 member) — 팀원의 사역팀 소속/배너 권한 위임을 관리할 수 있음
+    function isContentTeamLead() {
+      return isRegistered() && myData().ministryTeam == '콘텐츠팀' && myData().isMinistryLead == true;
+    }
+    // 역할 양도(transferRole) 대상이 될 수 있는 계층 — admin/pastor는 isAdmin()으로 이미 커버됨
+    function isTransferableRole(role) {
+      return role in ['small_leader', 'mid_leader', 'executive'];
+    }
+
+    // ── users ───────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      // Google 최초 로그인 시 본인 uid로 role=member/department='' 상태로만 스스로
+      // 생성 가능. 그 외(CSV 일괄 가져오기, 관리자가 미리 명단 등록 등)는 소팀장
+      // 이상이 대행 생성
+      allow create: if isSmallLeader() ||
+        (isOwner(uid) && request.resource.data.role == 'member' && request.resource.data.department == '');
+      allow update: if
+        // 일반 정보(이름/연락처/소속팀 등) 수정: 소팀장 이상, role은 그대로
+        (isSmallLeader() && request.resource.data.role == resource.data.role) ||
+        // role 변경(승급/강등)은 관리자만
+        isAdmin() ||
+        // QA 테스트 계정은 본인 role을 스스로 전환 가능
+        (isTestAccount() && isOwner(uid)) ||
+        // 신규 가입 온보딩: 방금 만든 본인 문서(department가 비어있던 상태)에 소속팀 등
+        // 정보를 처음 채우는 것만 허용, role은 member로 유지
+        (isOwner(uid) && resource.data.role == 'member' && request.resource.data.role == 'member' &&
+         resource.data.department == '' && request.resource.data.department != '') ||
+        // 콘텐츠팀 팀장이 팀원의 사역팀 소속/배너 권한 위임을 관리 (role은 못 바꿈)
+        (isContentTeamLead() && request.resource.data.role == resource.data.role) ||
+        // 역할 양도 1/2: 소팀장~임원팀장이 본인의 현재 역할을 그대로 다른 사람에게 넘겨줌
+        (isRegistered() && isTransferableRole(myData().role) && request.resource.data.role == myData().role) ||
+        // 역할 양도 2/2: 넘겨준 본인은 팀원으로 강등
+        (isOwner(uid) && isTransferableRole(myData().role) && request.resource.data.role == 'member');
+      allow delete: if isAdmin() ||
+        (isSmallLeader() && !(resource.data.role in ['admin', 'pastor', 'executive', 'mid_leader']));
+    }
+
+    // ── attendance / fees: 본인 기록은 스스로 기록, 그 외는 소팀장 이상 ──
+    match /attendance/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSmallLeader() || isOwner(request.resource.data.userId);
+      allow update: if isSmallLeader() ||
+        (isOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId);
+      allow delete: if isSmallLeader();
+    }
+    match /fees/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSmallLeader() || isOwner(request.resource.data.userId);
+      allow update: if isSmallLeader() ||
+        (isOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId);
+      allow delete: if isSmallLeader();
+    }
+
+    // ── visits (심방 신청) ────────────────────────────────────────────
+    match /visits/{visitId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(request.resource.data.userId);
+      allow update: if isSmallLeader();
+      allow delete: if isAdmin();
+    }
+    match /visitSlots/{slotId} {
+      allow read: if isSignedIn();
+      allow write: if isSmallLeader();
+    }
+
+    // ── pastorRequests (목사 권한 신청) ───────────────────────────────
+    match /pastorRequests/{reqId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(request.resource.data.userId);
+      // 승인 시 신청자의 role이 pastor로 바뀌므로 반드시 관리자만 처리
+      allow update, delete: if isAdmin();
+    }
+
+    // ── newFamilyRotations / ministryMeetings ────────────────────────
+    match /newFamilyRotations/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSmallLeader();
+    }
+    match /ministryMeetings/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSmallLeader();
+    }
+
+    // ── notifications: 본인 것만 읽고 읽음 처리 가능 ───────────────────
+    match /notifications/{id} {
+      allow read, update: if isOwner(resource.data.userId);
+      // 다른 사람에게 알림을 보내는 것은 항상 소팀장 이상의 동작(심방 승인, 팀
+      // 배정, 새가족 로테이션 배정 등)에서만 발생함
+      allow create: if isSmallLeader();
+      allow delete: if false;
+    }
+
+    // ── banners ────────────────────────────────────────────────────
+    match /banners/{id} {
+      allow read: if isSignedIn();
+      allow write: if canManageBanners();
+    }
+  }
+}

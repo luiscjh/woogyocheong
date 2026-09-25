@@ -100,6 +100,16 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       _currentUser = await _authService.signIn(email, password);
+      // Firebase 인증 계정은 있지만 그에 대응하는 회원 정보(Firestore 문서)가 아직
+      // 없는 경우(예: 콘솔에서 인증 계정만 직접 만든 경우) — currentUser가 null인
+      // 채로 authenticated 처리하면 이후 여러 화면이 null 단정(!)에서 그대로
+      // 충돌하므로, 이 경우는 로그인 실패로 취급함
+      if (_currentUser == null) {
+        _error = '이 계정에 연결된 회원 정보가 없습니다. 관리자에게 문의해 주세요.';
+        _status = AuthStatus.unauthenticated;
+        notifyListeners();
+        return false;
+      }
       _status = AuthStatus.authenticated;
       notifyListeners();
       return true;

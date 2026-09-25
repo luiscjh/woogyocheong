@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "484620994680",
+    "project_id": "conference-c9c99",
+    "storage_bucket": "conference-c9c99.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:484620994680:android:e1b6162b7fe689652b058d",
+        "android_client_info": {
+          "package_name": "com.example.church_youth_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-qArPggXhxKoV8ZfY5OGvnQgCD_vhhyI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
