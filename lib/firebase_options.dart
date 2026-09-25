@@ -42,15 +42,16 @@ class DefaultFirebaseOptions {
   // 받아뒀지만, 이 맥의 Ruby 툴체인(xcodeproj gem) 문제로 flutterfire configure가
   // Xcode 프로젝트 연동 단계에서 중단돼 Podfile 등 네이티브 설정은 아직 미완료임.
   // 실제 iOS 빌드 전에 flutterfire configure --platforms=ios를 다시 완주해야 함
+
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBKbli8uFIMueKn0ri8XVnZ3Yh9KO8ivEQ',
     appId: '1:484620994680:ios:de71546eb58733652b058d',
     messagingSenderId: '484620994680',
     projectId: 'conference-c9c99',
     storageBucket: 'conference-c9c99.firebasestorage.app',
+    iosClientId: '484620994680-l367tnvmh34iaa6dpv31e0ch2a78feeo.apps.googleusercontent.com',
     iosBundleId: 'com.example.churchYouthApp',
   );
-
   // macOS 앱은 Firebase 프로젝트에 아직 등록하지 않았음(모바일 출시가 목표라 후순위)
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'demo-api-key',
