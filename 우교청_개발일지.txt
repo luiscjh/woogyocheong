@@ -799,11 +799,12 @@
   Flutter SDK는 11차 작업에서 3.44.3 → 3.47.5로 업그레이드됨(Xcode
   27 빌드 호환성 문제 때문에 필요했음).
 
-  브랜치: main. 1~9차 작업까지는 모두 커밋 후 GitHub(origin/main)
-  push 완료(자세한 커밋 해시는 위 각 차수 섹션 참고). 10~11차 작업은
-  아직 커밋 전 — lib/, ios/*, android/*, firestore.rules,
-  firestore.indexes.json, firebase.json, pubspec.yaml,
-  analysis_options.yaml 등 다수 변경.
+  브랜치: main. 1~11차 작업까지는 모두 커밋 후 GitHub(origin/main)
+  push 완료(자세한 커밋 해시는 위 각 차수 섹션 참고, 10차는
+  1fd0e598, 11차는 c627a6e2). 12차 작업(앱 아이콘/스플래시)은 아직
+  커밋 전 — assets/icon/, pubspec.yaml, android/app/src/main/res/*,
+  ios/Runner/Assets.xcassets/*, ios/Runner/Info.plist,
+  ios/Runner/Base.lproj/LaunchScreen.storyboard, web/* 등 변경.
 
   웹 실행 명령(release 빌드 권장 — flutter run 디버그 모드는 이
   프로젝트 규모에서 모듈 로딩이 멈추는 문제가 있었음):
@@ -880,10 +881,50 @@
   - flutter analyze 통과 확인
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[12차 작업] 2026-09-25
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 앱 아이콘 및 스플래시 화면 제작
+  - 배경: [남은 작업] TODO에 있던 마지막 항목. 로그인 화면에 쓰이던
+    Icons.church(머티리얼 아이콘)와 AppColors.primary(#3F51B5)
+    스타일을 그대로 살려서 실제 아이콘/스플래시 이미지로 제작
+  - Homebrew로 librsvg(rsvg-convert) 설치 — SVG를 직접 그려 PNG로
+    변환하는 방식 사용(brew 설치 전 테스트했던 클로드-인-크롬
+    스크린샷 캡처 방식은 JPEG라 투명 배경이 안 돼서 채택 안 함)
+  - assets/icon/icon.svg → icon.png(1024x1024): 인디고
+    배경(#3F51B5) + 흰색 교회 실루엣(지붕·십자가·아치형 문) 직접
+    벡터로 그림
+  - assets/icon/splash.svg → splash.png: 앱 배경색(#F5F5F5) 위에
+    같은 교회 실루엣(인디고) + "우교청" 워드마크(Apple SD Gothic
+    Neo) — 로그인 화면 상단 로고 배치와 통일감 있게 구성. 두
+    SVG 원본 파일도 assets/icon/에 함께 보관(추후 재편집용)
+  - pubspec.yaml에 flutter_launcher_icons ^0.14.1,
+    flutter_native_splash ^2.4.3 dev_dependency 추가하고 설정 작성
+    (android/ios 아이콘은 아이콘 하나로 평범한 방식 생성 — Android
+    적응형 아이콘의 전경/배경 분리는 안 함, 효과 대비 작업량 커서
+    생략)
+  - dart run flutter_launcher_icons, dart run
+    flutter_native_splash:create 실행 → Android(mipmap 아이콘,
+    drawable 스플래시, values-v31 다크모드 스타일 포함)/iOS
+    (AppIcon.appiconset, LaunchImage.imageset, LaunchScreen.
+    storyboard)/Web 전부 자동 생성됨
+  - flutter build ios --simulator로 재빌드 후 시뮬레이터에 재설치해
+    홈 화면 아이콘이 정확히 반영됨을 스크린샷으로 확인. 스플래시는
+    전환 시간이 매우 짧아 스크린샷으로 화면 자체를 포착하긴
+    어려웠으나, 에셋 파일을 직접 열어 내용이 정확함을 확인했고
+    앱이 홈 화면까지 정상 로드되는 것도 확인함
+  - 홈 화면 앱 이름이 Xcode/Android 기본값인 영문 "Church Youth
+    App"/"church_youth_app"으로 표시되는 것을 발견해 함께 정리 —
+    ios/Runner/Info.plist의 CFBundleDisplayName과 android/app/src/
+    main/AndroidManifest.xml의 android:label을 각각 "우교청"으로
+    변경. 재빌드 후 홈 화면에 "우교청"으로 정상 표시됨을 확인
+  - flutter analyze 통과 확인
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [남은 작업 (TODO)]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  [ ] 10~11차 작업 커밋 및 push
+  [ ] 12차 작업 커밋 및 push
   [ ] 웹 Google 로그인 COOP 이슈 — iOS 네이티브에서는 정상 동작
         확인됨(11차 작업). 실제 출시엔 영향 없어 우선순위 낮음.
         웹에서도 살리려면 signInWithPopup → signInWithRedirect
@@ -901,7 +942,7 @@
   [ ] Firebase Console에서 Google 로그인 활성화 → 완료(10차
         작업에서 처리)
   [ ] 웹 배포 (Firebase Hosting 또는 Netlify)
-  [ ] 앱 아이콘 및 스플래시 화면 커스터마이징
+  [ ] 앱 아이콘 및 스플래시 화면 커스터마이징 → 완료(12차 작업)
   [ ] 소팀장이 "본인 소속팀만" 수정 가능해야 하는 세부 제약을
         firestore.rules에 아직 강제하지 않음(알려진 단순화,
         firestore.rules 파일 상단 주석 참고)
