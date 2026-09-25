@@ -9,7 +9,7 @@ class NotificationModel {
   final String userId;
   final String title;
   final String body;
-  final String type; // visit / pastorRequest / newFamilyRotation / teamAssignment
+  final String type; // visit / permissionRequest / newFamilyRotation / teamAssignment
   final DateTime createdAt;
   final bool isRead;
 

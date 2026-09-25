@@ -4,7 +4,7 @@ import '../../providers/auth_provider.dart';
 import '../../utils/constants.dart';
 import 'member_management.dart';
 import 'banner_management.dart';
-import 'pastor_request_management.dart';
+import 'permission_request_management.dart';
 import 'new_family_management.dart';
 import 'new_family_rotation_management.dart';
 import 'small_leader_status_screen.dart';
@@ -188,11 +188,11 @@ class AdminDashboard extends StatelessWidget {
           if (auth.isAdmin) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
-              icon: Icons.church_outlined,
-              title: '목사 권한 신청 관리',
-              subtitle: '회원의 목사 권한 신청 승인/거절',
+              icon: Icons.verified_user_outlined,
+              title: '권한 신청 관리',
+              subtitle: '회원/리더의 권한 신청 승인/거절',
               color: Colors.brown,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PastorRequestManagementScreen())),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PermissionRequestManagementScreen())),
             ),
           ],
         ],

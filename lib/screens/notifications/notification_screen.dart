@@ -13,8 +13,8 @@ class NotificationScreen extends StatelessWidget {
     switch (type) {
       case 'visit':
         return Icons.favorite_border;
-      case 'pastorRequest':
-        return Icons.church_outlined;
+      case 'permissionRequest':
+        return Icons.verified_user_outlined;
       case 'newFamilyRotation':
         return Icons.event_repeat_outlined;
       case 'teamAssignment':

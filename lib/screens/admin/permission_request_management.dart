@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/firestore_service.dart';
-import '../../models/pastor_request_model.dart';
+import '../../models/permission_request_model.dart';
 import '../../models/user_model.dart';
 import '../../utils/constants.dart';
 import '../../widgets/confirm_dialog.dart';
 
-class PastorRequestManagementScreen extends StatefulWidget {
-  const PastorRequestManagementScreen({super.key});
+class PermissionRequestManagementScreen extends StatefulWidget {
+  const PermissionRequestManagementScreen({super.key});
 
   @override
-  State<PastorRequestManagementScreen> createState() => _PastorRequestManagementScreenState();
+  State<PermissionRequestManagementScreen> createState() => _PermissionRequestManagementScreenState();
 }
 
-class _PastorRequestManagementScreenState extends State<PastorRequestManagementScreen> {
+class _PermissionRequestManagementScreenState extends State<PermissionRequestManagementScreen> {
   final _service = FirestoreService();
   late int _year;
   late int _month;
@@ -29,12 +29,12 @@ class _PastorRequestManagementScreenState extends State<PastorRequestManagementS
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('목사 권한 신청 관리')),
+      appBar: AppBar(title: const Text('권한 신청 관리')),
       body: StreamBuilder<List<UserModel>>(
         stream: _service.streamAllMembers(),
         builder: (ctx, memberSnap) {
-          return StreamBuilder<List<PastorRequestModel>>(
-            stream: _service.streamPastorRequests(),
+          return StreamBuilder<List<PermissionRequestModel>>(
+            stream: _service.streamPermissionRequests(),
             builder: (ctx, reqSnap) {
               if (reqSnap.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -85,9 +85,9 @@ class _PastorRequestManagementScreenState extends State<PastorRequestManagementS
                     const Center(
                       child: Column(
                         children: [
-                          Icon(Icons.church_outlined, size: 64, color: Colors.grey),
+                          Icon(Icons.verified_user_outlined, size: 64, color: Colors.grey),
                           SizedBox(height: 12),
-                          Text('목사 권한 신청이 없습니다.'),
+                          Text('권한 신청이 없습니다.'),
                         ],
                       ),
                     ),
@@ -147,7 +147,7 @@ class _MonthSelector extends StatelessWidget {
 }
 
 class _RequestCard extends StatelessWidget {
-  final PastorRequestModel request;
+  final PermissionRequestModel request;
   final UserModel? requester;
   final FirestoreService service;
 
@@ -205,6 +205,8 @@ class _RequestCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
+            Text(request.targetLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
             Text(request.email, style: const TextStyle(color: AppColors.textSecondary)),
             if (request.status == 'pending') ...[
               const Divider(height: 20),
@@ -245,8 +247,8 @@ class _RequestCard extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('목사 권한 승인'),
-        content: Text('${request.userName}님에게 목사 권한을 부여하시겠습니까?'),
+        title: const Text('권한 신청 승인'),
+        content: Text('${request.userName}님에게 ${request.targetLabel} 권한을 부여하시겠습니까?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
           ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('승인')),
@@ -254,15 +256,15 @@ class _RequestCard extends StatelessWidget {
       ),
     );
     if (confirm != true || requester == null) return;
-    await service.approvePastorRequest(request.id, requester!);
+    await service.approvePermissionRequest(request, requester!);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${request.userName}님에게 목사 권한을 부여했습니다.'), backgroundColor: AppColors.success),
+      SnackBar(content: Text('${request.userName}님에게 ${request.targetLabel} 권한을 부여했습니다.'), backgroundColor: AppColors.success),
     );
   }
 
   Future<void> _reject(BuildContext context) async {
-    await service.rejectPastorRequest(request.id, requesterId: request.userId);
+    await service.rejectPermissionRequest(request.id, requesterId: request.userId, targetLabel: request.targetLabel);
   }
 
   Future<void> _delete(BuildContext context) async {
@@ -272,7 +274,7 @@ class _RequestCard extends StatelessWidget {
       content: '${request.userName}님의 ${_statusLabel(request.status)} 신청 기록을 삭제하시겠습니까?',
     );
     if (!confirm) return;
-    await service.deletePastorRequest(request.id);
+    await service.deletePermissionRequest(request.id);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('신청 기록을 삭제했습니다.'), backgroundColor: AppColors.success),

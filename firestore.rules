@@ -122,11 +122,11 @@ service cloud.firestore {
       allow write: if isSmallLeader();
     }
 
-    // ── pastorRequests (목사 권한 신청) ───────────────────────────────
-    match /pastorRequests/{reqId} {
+    // ── permissionRequests (권한 신청: 목사님/임원팀/중팀장/소팀장/사역팀) ──
+    match /permissionRequests/{reqId} {
       allow read: if isSignedIn();
       allow create: if isOwner(request.resource.data.userId);
-      // 승인 시 신청자의 role이 pastor로 바뀌므로 반드시 관리자만 처리
+      // 승인 시 신청자의 role/department/ministryTeam이 바뀌므로 반드시 관리자만 처리
       allow update, delete: if isAdmin();
     }
 

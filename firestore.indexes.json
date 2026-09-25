@@ -25,7 +25,7 @@
       ]
     },
     {
-      "collectionGroup": "pastorRequests",
+      "collectionGroup": "permissionRequests",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "userId", "order": "ASCENDING" },

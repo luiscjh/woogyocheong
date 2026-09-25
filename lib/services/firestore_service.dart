@@ -4,7 +4,7 @@ import '../models/attendance_model.dart';
 import '../models/fee_model.dart';
 import '../models/visit_model.dart';
 import '../models/visit_slot_model.dart';
-import '../models/pastor_request_model.dart';
+import '../models/permission_request_model.dart';
 import '../models/new_family_rotation_model.dart';
 import '../models/banner_model.dart';
 import '../models/ministry_meeting_model.dart';
@@ -221,59 +221,99 @@ class FirestoreService {
     await _db.collection('visitSlots').doc(id).delete();
   }
 
-  // ── Pastor Requests ─────────────────────────────────────────────────────
-  Stream<List<PastorRequestModel>> streamPastorRequests() {
-    if (demoMode) return _demo.streamPastorRequests();
-    return _db.collection('pastorRequests')
+  // ── Permission Requests (권한 신청) ────────────────────────────────────
+  Stream<List<PermissionRequestModel>> streamPermissionRequests() {
+    if (demoMode) return _demo.streamPermissionRequests();
+    return _db.collection('permissionRequests')
         .orderBy('requestDate', descending: true)
         .snapshots()
-        .map((s) => s.docs.map(PastorRequestModel.fromFirestore).toList());
+        .map((s) => s.docs.map(PermissionRequestModel.fromFirestore).toList());
   }
 
-  Stream<List<PastorRequestModel>> streamUserPastorRequests(String userId) {
-    if (demoMode) return _demo.streamUserPastorRequests(userId);
-    return _db.collection('pastorRequests')
+  Stream<List<PermissionRequestModel>> streamUserPermissionRequests(String userId) {
+    if (demoMode) return _demo.streamUserPermissionRequests(userId);
+    return _db.collection('permissionRequests')
         .where('userId', isEqualTo: userId)
         .orderBy('requestDate', descending: true)
         .snapshots()
-        .map((s) => s.docs.map(PastorRequestModel.fromFirestore).toList());
+        .map((s) => s.docs.map(PermissionRequestModel.fromFirestore).toList());
   }
 
-  Future<void> requestPastorRole(PastorRequestModel request) async {
-    if (demoMode) { _demo.addPastorRequest(request); return; }
-    await _db.collection('pastorRequests').doc(request.id).set(request.toMap());
+  Future<void> requestPermission(PermissionRequestModel request) async {
+    if (demoMode) { _demo.addPermissionRequest(request); return; }
+    await _db.collection('permissionRequests').doc(request.id).set(request.toMap());
   }
 
-  // 승인: 신청자 역할을 목사님으로 전환하고 신청 상태를 approved로 변경
-  Future<void> approvePastorRequest(String requestId, UserModel requester) async {
-    await updateUser(requester.copyWith(role: UserRole.pastor), previousDepartment: requester.department);
-    await _updatePastorRequestStatus(requestId, 'approved', requesterId: requester.uid);
+  // 승인: 신청 종류에 따라 역할/소속팀/사역팀을 반영하고 신청 상태를 approved로 변경.
+  // 두 문서(users, permissionRequests)를 WriteBatch로 묶어 원자적으로 처리한다 —
+  // 순차적인 update 두 번으로 나눠서 하면, 두 번째 쓰기의 보안 규칙(isAdmin())이
+  // 이미 반영된 첫 번째 쓰기 이후 상태로 평가돼 승인자 본인이 요청자이기도 한 경우
+  // (예: 테스트 계정으로 역할을 스스로 전환) 두 번째 쓰기가 거부될 수 있다. 배치로
+  // 묶으면 배치 내 모든 규칙 평가가 커밋 이전(배치 시작 시점) 상태 기준으로
+  // 이뤄지므로 이 경합이 사라진다.
+  Future<void> approvePermissionRequest(PermissionRequestModel request, UserModel requester) async {
+    UserModel updated;
+    switch (request.requestType) {
+      case PermissionRequestType.pastor:
+        updated = requester.copyWith(role: UserRole.pastor);
+      case PermissionRequestType.executive:
+        updated = requester.copyWith(role: UserRole.executive, department: AppTeams.executiveTeam);
+      case PermissionRequestType.midLeader:
+        updated = requester.copyWith(role: UserRole.midLeader, department: request.targetDepartment ?? requester.department);
+      case PermissionRequestType.smallLeader:
+        updated = requester.copyWith(role: UserRole.smallLeader, department: request.targetDepartment ?? requester.department);
+      case PermissionRequestType.ministryTeam:
+        updated = requester.copyWith(ministryTeam: request.targetMinistryTeam ?? requester.ministryTeam);
+      default:
+        updated = requester;
+    }
+    if (demoMode) {
+      _demo.updateUser(updated);
+      _demo.updatePermissionRequestStatus(request.id, 'approved');
+      return;
+    }
+    final batch = _db.batch();
+    batch.update(_db.collection('users').doc(updated.uid), updated.toMap());
+    final oldDept = requester.department;
+    if (oldDept.isNotEmpty && oldDept != updated.department && updated.department.isNotEmpty) {
+      batch.set(_db.collection('notifications').doc(), _notificationData(
+        userId: updated.uid,
+        title: '소속팀 변경',
+        body: '소속팀이 ${AppTeams.deptLabel(updated.department)}(으)로 변경되었습니다.',
+        type: 'teamAssignment',
+      ));
+    }
+    batch.update(_db.collection('permissionRequests').doc(request.id), {'status': 'approved'});
+    batch.set(_db.collection('notifications').doc(), _notificationData(
+      userId: updated.uid,
+      title: '권한 신청 결과',
+      body: '${request.targetLabel} 권한 신청이 승인되었습니다.',
+      type: 'permissionRequest',
+    ));
+    await batch.commit();
   }
 
-  Future<void> rejectPastorRequest(String requestId, {String? requesterId}) async {
-    await _updatePastorRequestStatus(requestId, 'rejected', requesterId: requesterId);
+  Future<void> rejectPermissionRequest(String requestId, {required String requesterId, required String targetLabel}) async {
+    await _updatePermissionRequestStatus(requestId, 'rejected', requesterId: requesterId, targetLabel: targetLabel);
   }
 
-  // requesterId를 호출부가 이미 들고 있는 PastorRequestModel에서 그대로 전달하면
-  // 변경 감지용 추가 조회 없이 바로 갱신할 수 있음
-  Future<void> _updatePastorRequestStatus(String id, String status, {String? requesterId}) async {
-    if (demoMode) { _demo.updatePastorRequestStatus(id, status); return; }
-    requesterId ??= (await _db.collection('pastorRequests').doc(id).get()).data()?['userId'] as String? ?? '';
-    await _db.collection('pastorRequests').doc(id).update({'status': status});
+  Future<void> _updatePermissionRequestStatus(String id, String status, {required String requesterId, required String targetLabel}) async {
+    if (demoMode) { _demo.updatePermissionRequestStatus(id, status); return; }
+    await _db.collection('permissionRequests').doc(id).update({'status': status});
     if (requesterId.isNotEmpty) {
       await _addNotification(
         userId: requesterId,
-        title: '목사 권한 신청 결과',
-        body: status == 'approved' ? '목사 권한 신청이 승인되었습니다.' : '목사 권한 신청이 거절되었습니다.',
-        type: 'pastorRequest',
+        title: '권한 신청 결과',
+        body: status == 'approved' ? '$targetLabel 권한 신청이 승인되었습니다.' : '$targetLabel 권한 신청이 거절되었습니다.',
+        type: 'permissionRequest',
       );
     }
   }
 
   // 승인/거절 등 처리가 끝난 신청 기록만 관리자가 삭제(정리) 가능
-  Future<void> deletePastorRequest(String id) async {
-    if (demoMode) { _demo.deletePastorRequest(id); return; }
-    await _db.collection('pastorRequests').doc(id).delete();
+  Future<void> deletePermissionRequest(String id) async {
+    if (demoMode) { _demo.deletePermissionRequest(id); return; }
+    await _db.collection('permissionRequests').doc(id).delete();
   }
 
   // ── New Family Rotation (주차 1~3별 고정 담당 리더) ──────────────────────
@@ -358,14 +398,25 @@ class FirestoreService {
     required String body,
     required String type,
   }) async {
-    await _db.collection('notifications').add({
+    await _db.collection('notifications').add(_notificationData(
+      userId: userId, title: title, body: body, type: type,
+    ));
+  }
+
+  Map<String, dynamic> _notificationData({
+    required String userId,
+    required String title,
+    required String body,
+    required String type,
+  }) {
+    return {
       'userId': userId,
       'title': title,
       'body': body,
       'type': type,
       'createdAt': Timestamp.fromDate(DateTime.now()),
       'isRead': false,
-    });
+    };
   }
 
   // ── Banners ───────────────────────────────────────────────────────────

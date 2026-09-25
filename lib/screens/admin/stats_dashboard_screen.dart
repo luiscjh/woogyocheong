@@ -4,7 +4,7 @@ import '../../models/user_model.dart';
 import '../../models/attendance_model.dart';
 import '../../models/fee_model.dart';
 import '../../models/visit_model.dart';
-import '../../models/pastor_request_model.dart';
+import '../../models/permission_request_model.dart';
 import '../../utils/constants.dart';
 
 // 관리자용 전체 실적 요약 대시보드: 회원/출석/회비/심방 현황을 한눈에 확인
@@ -42,16 +42,16 @@ class StatsDashboardScreen extends StatelessWidget {
                     builder: (ctx, visitSnap) {
                       final visits = visitSnap.data ?? [];
 
-                      return StreamBuilder<List<PastorRequestModel>>(
-                        stream: service.streamPastorRequests(),
+                      return StreamBuilder<List<PermissionRequestModel>>(
+                        stream: service.streamPermissionRequests(),
                         builder: (ctx, reqSnap) {
-                          final pastorRequests = reqSnap.data ?? [];
+                          final permissionRequests = reqSnap.data ?? [];
                           return _DashboardBody(
                             members: members,
                             attendance: attendance,
                             fees: fees,
                             visits: visits,
-                            pastorRequests: pastorRequests,
+                            permissionRequests: permissionRequests,
                             now: now,
                           );
                         },
@@ -73,7 +73,7 @@ class _DashboardBody extends StatelessWidget {
   final List<AttendanceModel> attendance;
   final List<FeeModel> fees;
   final List<VisitModel> visits;
-  final List<PastorRequestModel> pastorRequests;
+  final List<PermissionRequestModel> permissionRequests;
   final DateTime now;
 
   const _DashboardBody({
@@ -81,7 +81,7 @@ class _DashboardBody extends StatelessWidget {
     required this.attendance,
     required this.fees,
     required this.visits,
-    required this.pastorRequests,
+    required this.permissionRequests,
     required this.now,
   });
 
@@ -103,7 +103,7 @@ class _DashboardBody extends StatelessWidget {
     for (final v in visits) {
       visitCounts[v.status] = (visitCounts[v.status] ?? 0) + 1;
     }
-    final pendingRequestCount = pastorRequests.where((r) => r.status == 'pending').length;
+    final pendingRequestCount = permissionRequests.where((r) => r.status == 'pending').length;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -139,8 +139,8 @@ class _DashboardBody extends StatelessWidget {
         if (pendingRequestCount > 0) ...[
           const SizedBox(height: 20),
           _PendingActionCard(
-            icon: Icons.church_outlined,
-            label: '처리 대기 중인 목사 권한 신청',
+            icon: Icons.verified_user_outlined,
+            label: '처리 대기 중인 권한 신청',
             count: pendingRequestCount,
           ),
         ],
