@@ -568,7 +568,7 @@ class _TestRoleSwitcherSection extends StatelessWidget {
       bannerAccessGranted:
           option.ministryTeam == AppTeams.contentTeam && !option.isMinistryLead ? latest.bannerAccessGranted : false,
     );
-    await service.updateUser(updated, previousDepartment: latest.department);
+    await service.updateUser(updated, previousDepartment: latest.department, notify: false);
     if (!context.mounted) return;
     context.read<AuthProvider>().setCurrentUser(updated);
     ScaffoldMessenger.of(context).showSnackBar(

@@ -1044,4 +1044,24 @@
     재빌드 후 클로드-인-크롬으로 관리 메뉴 카드와 상세 화면
     AppBar 타이틀이 모두 "청년부 현황"으로 정상 표시됨을 확인
 
+■ 테스트 계정 역할 전환 시 "소속팀 변경" 알림이 뜨지 않도록 수정
+  - 배경: "테스팅 계정에서 역할 변경할 때는 알림이 안뜨게 해줘"라는
+    요청. profile_screen.dart의 _TestRoleSwitcherSection이 QA용으로
+    역할/소속팀을 즉시 바꿀 때도 firestore_service.dart의
+    updateUser가 소속팀이 달라지면 무조건 "소속팀 변경" 알림을
+    생성하고 있어서, 테스트 계정으로 역할을 이리저리 바꿔볼 때마다
+    알림함에 실제 업무와 무관한 알림이 계속 쌓이고 있었음
+  - firestore_service.dart의 updateUser에 notify(기본값 true) 파라미터를
+    추가해 이 값이 false면 소속팀 변경 알림 생성을 건너뛰도록 하고,
+    profile_screen.dart의 테스트 역할 전환 호출부(_switchRole)에서만
+    notify: false를 전달하도록 수정. 승인 처리(approvePermissionRequest)나
+    역할 양도(transferRole) 등 실제 소속팀 변경 흐름은 그대로 알림이
+    발송됨
+  - flutter analyze 통과 확인, flutter build web --release로 재빌드 후
+    클로드-인-크롬으로 테스트 계정을 소속팀이 다른 역할(중팀장, A-0)로
+    전환해 알림함에 새 "소속팀 변경" 알림이 생기지 않음을 확인
+    (전환 전/후 알림 목록을 비교해 새 항목이 없음을 검증). 검증 중
+    이전 세션 이후 테스트 계정이 팀원 역할로 남아있던 것을 발견해
+    다시 관리자/A-1으로 원복
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -33,14 +33,15 @@ class FirestoreService {
   }
 
   // previousDepartment를 호출부가 이미 들고 있으면(대부분의 경우) 그대로 전달해
-  // 변경 감지용 추가 조회 없이 바로 갱신할 수 있음
-  Future<void> updateUser(UserModel user, {String? previousDepartment}) async {
+  // 변경 감지용 추가 조회 없이 바로 갱신할 수 있음. notify: false는 테스트 계정의
+  // 역할 전환처럼 실제 소속팀 변경이 아닌 경우에 알림 생성을 건너뛰기 위함
+  Future<void> updateUser(UserModel user, {String? previousDepartment, bool notify = true}) async {
     if (demoMode) { _demo.updateUser(user); return; }
     final oldDept = previousDepartment ??
         (await _db.collection('users').doc(user.uid).get()).data()?['department'] as String? ??
         '';
     await _db.collection('users').doc(user.uid).update(user.toMap());
-    if (oldDept.isNotEmpty && oldDept != user.department && user.department.isNotEmpty) {
+    if (notify && oldDept.isNotEmpty && oldDept != user.department && user.department.isNotEmpty) {
       await _addNotification(
         userId: user.uid,
         title: '소속팀 변경',
