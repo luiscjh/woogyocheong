@@ -127,16 +127,13 @@ class ProfileScreen extends StatelessWidget {
   }
 
   List<UserModel> _candidatesFor(UserModel me, List<UserModel> all) {
-    // 목사님은 일반 회원이 아니라, 이미 목사님으로 등록된 사람에게만 양도 가능
-    if (me.isPastor) {
-      return all.where((m) => m.uid != me.uid && m.isPastor).toList();
-    }
     final others = all.where((m) => m.uid != me.uid && m.role == UserRole.member);
     if (me.role == UserRole.smallLeader) {
       return others.where((m) => m.department == me.department).toList();
     } else if (me.role == UserRole.midLeader) {
       return others.where((m) => m.midTeam == me.midTeam).toList();
-    } else if (me.role == UserRole.executive) {
+    } else if (me.role == UserRole.executive || me.isPastor) {
+      // 임원팀과 목사님은 소속팀 제한 없이 전체 팀원 중 아무에게나 양도 가능
       return others.toList();
     }
     return const [];
