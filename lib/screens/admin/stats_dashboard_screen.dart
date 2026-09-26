@@ -7,7 +7,7 @@ import '../../models/visit_model.dart';
 import '../../models/permission_request_model.dart';
 import '../../utils/constants.dart';
 
-// 관리자용 전체 실적 요약 대시보드: 회원/출석/회비/심방 현황을 한눈에 확인
+// 관리자용 청년부 전체 현황 요약 대시보드: 회원/출석/회비/심방 현황을 한눈에 확인
 class StatsDashboardScreen extends StatelessWidget {
   const StatsDashboardScreen({super.key});
 
@@ -17,14 +17,14 @@ class StatsDashboardScreen extends StatelessWidget {
     final now = DateTime.now();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('실적 대시보드')),
+      appBar: AppBar(title: const Text('청년부 현황')),
       body: StreamBuilder<List<UserModel>>(
         stream: service.streamAllMembers(),
         builder: (ctx, memberSnap) {
           if (memberSnap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          // 목사님은 관리/실적 집계 대상에서 제외 (다른 관리 화면들과 동일한 기준)
+          // 목사님은 관리/현황 집계 대상에서 제외 (다른 관리 화면들과 동일한 기준)
           final members = (memberSnap.data ?? []).where((m) => !m.isPastor).toList();
 
           return StreamBuilder<List<AttendanceModel>>(

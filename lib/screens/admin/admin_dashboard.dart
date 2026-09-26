@@ -46,7 +46,7 @@ class AdminDashboard extends StatelessWidget {
           if (auth.isAdmin) ...[
             _AdminMenuCard(
               icon: Icons.dashboard_outlined,
-              title: '실적 대시보드',
+              title: '청년부 현황',
               subtitle: '회원/출석/회비/심방 현황 요약',
               color: Colors.deepPurple,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StatsDashboardScreen())),
