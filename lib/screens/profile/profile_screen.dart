@@ -268,14 +268,15 @@ class _InfoItem {
 }
 
 // 현재 역할보다 위 단계의 역할이나 사역팀 소속을 관리자에게 신청하는 섹션.
-// 신청 가능한 종류는 현재 역할 기준으로 계산됨(예: 소팀장은 중팀장/임원팀/
-// 목사님만 신청 가능, 소팀장 재신청은 불가)
+// 신청 가능한 종류는 현재 역할 기준으로 계산됨(예: 소팀장은 중팀장/임원팀만
+// 신청 가능, 소팀장 재신청은 불가). 목사님 역할은 이 신청으로 얻을 수 없고
+// 기존 목사님의 역할 양도(transferRole)를 통해서만 넘길 수 있음
 class _PermissionRequestSection extends StatelessWidget {
   final UserModel user;
 
   const _PermissionRequestSection({required this.user});
 
-  // member=0 ... pastor/admin=4. 본인보다 순위가 높은 종류만 신청 가능
+  // member=0 ... executive=3, pastor/admin=4. 본인보다 순위가 높은 종류만 신청 가능
   static int _roleRank(String role) {
     if (role == UserRole.smallLeader) return 1;
     if (role == UserRole.midLeader) return 2;
@@ -290,7 +291,6 @@ class _PermissionRequestSection extends StatelessWidget {
       if (rank < 1) PermissionRequestType.smallLeader,
       if (rank < 2) PermissionRequestType.midLeader,
       if (rank < 3) PermissionRequestType.executive,
-      if (rank < 4) PermissionRequestType.pastor,
       if (AppTeams.canJoinMinistryTeam(user.role) && user.ministryTeam.isEmpty) PermissionRequestType.ministryTeam,
     ];
   }
