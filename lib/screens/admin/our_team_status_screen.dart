@@ -7,8 +7,8 @@ import '../../models/attendance_model.dart';
 import '../../utils/constants.dart';
 
 // 중팀장/소팀장이 "청년부 현황"의 축소판으로, 본인 팀(중팀 또는 소팀) 범위의
-// 출석률만 주별/월별/전체 기간별로 확인하는 화면. 전체 회원·회비·심방 등은
-// 다루지 않고 출석률에 집중한다.
+// 팀원 개개인의 전체 기간 출석률을 확인하는 화면. 전체 회원·회비·심방 등은
+// 다루지 않고 개인별 출석률에 집중한다.
 class OurTeamStatusScreen extends StatelessWidget {
   const OurTeamStatusScreen({super.key});
 
@@ -69,21 +69,17 @@ class _OurTeamStatusBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totalMembers = members.length;
-    // 날짜(서비스 일자)별 출석 인원을 한 번의 순회로 집계 — 전원 결석한 날도
-    // dayKeys에는 남아 0%로 표시되도록, isPresent와 무관하게 날짜 키를 모음
-    final presentCountByDay = <String, int>{};
+    // 팀 전체 서비스 일자(dayKeys)와 회원별 출석 일수를 한 번의 순회로 집계 —
+    // 출석 기록이 새로 쌓일 때마다 실시간 스트림으로 자동 반영됨
     final dayKeysSet = <String>{};
-    // 개인별 출석률 계산용 — 회원별로 날짜 키에 대한 출석 여부를 기록
-    final attendanceByUser = <String, Map<String, bool>>{};
+    final presentCountByUser = <String, int>{};
     for (final a in attendance) {
-      final key = AttendanceModel.dateKey(a.date);
-      dayKeysSet.add(key);
-      if (a.isPresent) presentCountByDay[key] = (presentCountByDay[key] ?? 0) + 1;
-      attendanceByUser.putIfAbsent(a.userId, () => {})[key] = a.isPresent;
+      dayKeysSet.add(AttendanceModel.dateKey(a.date));
+      if (a.isPresent) presentCountByUser[a.userId] = (presentCountByUser[a.userId] ?? 0) + 1;
     }
-    final dayKeys = dayKeysSet.toList()..sort();
+    final serviceDayCount = dayKeysSet.length;
 
-    if (totalMembers == 0 || dayKeys.isEmpty) {
+    if (totalMembers == 0 || serviceDayCount == 0) {
       return ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -96,79 +92,26 @@ class _OurTeamStatusBody extends StatelessWidget {
       );
     }
 
-    // 월별 집계: YYYY-MM 단위로 그룹
-    final monthKeysOrdered = <String>[];
-    final presentByMonth = <String, int>{};
-    final dayCountByMonth = <String, int>{};
-    for (final key in dayKeys) {
-      final month = key.substring(0, 7);
-      if (!monthKeysOrdered.contains(month)) monthKeysOrdered.add(month);
-      presentByMonth[month] = (presentByMonth[month] ?? 0) + (presentCountByDay[key] ?? 0);
-      dayCountByMonth[month] = (dayCountByMonth[month] ?? 0) + 1;
-    }
-
-    // 전체 기간 집계
-    final totalPresent = presentCountByDay.values.fold(0, (sum, v) => sum + v);
-    final overallRate = totalPresent / (totalMembers * dayKeys.length);
-
-    final recentWeeks = dayKeys.length > 8 ? dayKeys.sublist(dayKeys.length - 8) : dayKeys;
-    final recentMonths =
-        monthKeysOrdered.length > 6 ? monthKeysOrdered.sublist(monthKeysOrdered.length - 6) : monthKeysOrdered;
-
-    // 개인별 출석률: 주별=가장 최근 서비스 일자 출석 여부, 월별=이번 달 출석일 비율,
-    // 전체=전체 기간 출석일 비율. 이름 순으로 정렬
-    final lastDayKey = dayKeys.last;
-    final currentMonth = monthKeysOrdered.last;
-    final currentMonthDayCount = dayCountByMonth[currentMonth] ?? 1;
+    // 팀 전체 서비스 일수 대비 본인 출석 일수 비율 — 출석률이 낮은 순으로 정렬해
+    // 관리가 필요한 팀원을 먼저 확인할 수 있게 함
     final memberRows = members.map((m) {
-      final records = attendanceByUser[m.uid] ?? const {};
-      final presentInMonth = dayKeys.where((k) => k.startsWith(currentMonth) && records[k] == true).length;
-      final presentOverall = dayKeys.where((k) => records[k] == true).length;
-      return _MemberRateRow(
-        name: m.name,
-        weeklyRate: records[lastDayKey] == true ? 1.0 : 0.0,
-        monthlyRate: presentInMonth / currentMonthDayCount,
-        overallRate: presentOverall / dayKeys.length,
-      );
+      final rate = (presentCountByUser[m.uid] ?? 0) / serviceDayCount;
+      return _MemberRateRow(name: m.name, rate: rate);
     }).toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+      ..sort((a, b) {
+        final cmp = a.rate.compareTo(b.rate);
+        return cmp != 0 ? cmp : a.name.compareTo(b.name);
+      });
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _SectionTitle(teamLabel),
         const SizedBox(height: 4),
-        Text('전체 팀원 $totalMembers명', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+        Text('전체 팀원 $totalMembers명 · 총 $serviceDayCount회 출석 체크',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
         const SizedBox(height: 20),
-        const _SectionTitle('주별 출석률'),
-        _RateTrendCard(
-          bars: [
-            for (final key in recentWeeks)
-              _RateBar(label: key.substring(5), rate: (presentCountByDay[key] ?? 0) / totalMembers),
-          ],
-        ),
-        const SizedBox(height: 20),
-        const _SectionTitle('월별 출석률'),
-        _RateTrendCard(
-          bars: [
-            for (final month in recentMonths)
-              _RateBar(
-                label: month.substring(5),
-                rate: (presentByMonth[month] ?? 0) / (totalMembers * (dayCountByMonth[month] ?? 1)),
-              ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        const _SectionTitle('전체 기간 출석률'),
-        _OverallRateCard(
-          rate: overallRate,
-          serviceDayCount: dayKeys.length,
-          firstDate: dayKeys.first,
-          lastDate: dayKeys.last,
-        ),
-        const SizedBox(height: 20),
-        const _SectionTitle('개인별 출석률'),
-        _MemberRateCard(rows: memberRows),
+        for (final row in memberRows) _MemberRateTile(name: row.name, rate: row.rate),
       ],
     );
   }
@@ -184,174 +127,46 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _RateBar {
-  final String label;
+class _MemberRateRow {
+  final String name;
   final double rate;
-  const _RateBar({required this.label, required this.rate});
+  const _MemberRateRow({required this.name, required this.rate});
 }
 
-class _RateTrendCard extends StatelessWidget {
-  final List<_RateBar> bars;
-  const _RateTrendCard({required this.bars});
-
-  static const _barHeight = 100.0;
-
-  @override
-  Widget build(BuildContext context) {
-    if (bars.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Text('표시할 기록이 없습니다.', style: TextStyle(color: AppColors.textSecondary)),
-        ),
-      );
-    }
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              for (final bar in bars)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('${(bar.rate * 100).round()}%',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 6),
-                      SizedBox(
-                        height: _barHeight,
-                        width: 28,
-                        child: Align(
-                          alignment: Alignment.bottomCenter,
-                          child: Container(
-                            height: _barHeight * bar.rate.clamp(0, 1),
-                            decoration: const BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(bar.label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OverallRateCard extends StatelessWidget {
+class _MemberRateTile extends StatelessWidget {
+  final String name;
   final double rate;
-  final int serviceDayCount;
-  final String firstDate;
-  final String lastDate;
-
-  const _OverallRateCard({
-    required this.rate,
-    required this.serviceDayCount,
-    required this.firstDate,
-    required this.lastDate,
-  });
+  const _MemberRateTile({required this.name, required this.rate});
 
   @override
   Widget build(BuildContext context) {
     return Card(
+      margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${(rate * 100).round()}%',
-                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary)),
-            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(
+                  '${(rate * 100).round()}%',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: LinearProgressIndicator(
                 value: rate.clamp(0, 1),
-                minHeight: 10,
+                minHeight: 8,
                 backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                 valueColor: const AlwaysStoppedAnimation(AppColors.primary),
               ),
             ),
-            const SizedBox(height: 12),
-            Text('총 $serviceDayCount회 출석 체크 · $firstDate ~ $lastDate',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MemberRateRow {
-  final String name;
-  final double weeklyRate;
-  final double monthlyRate;
-  final double overallRate;
-
-  const _MemberRateRow({
-    required this.name,
-    required this.weeklyRate,
-    required this.monthlyRate,
-    required this.overallRate,
-  });
-}
-
-class _MemberRateCard extends StatelessWidget {
-  final List<_MemberRateRow> rows;
-  const _MemberRateCard({required this.rows});
-
-  @override
-  Widget build(BuildContext context) {
-    if (rows.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Text('표시할 팀원이 없습니다.', style: TextStyle(color: AppColors.textSecondary)),
-        ),
-      );
-    }
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-        child: Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                children: [
-                  Expanded(flex: 3, child: Text('이름', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-                  Expanded(flex: 2, child: Text('주별', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-                  Expanded(flex: 2, child: Text('월별', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-                  Expanded(flex: 2, child: Text('전체', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            for (final row in rows) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
-                  children: [
-                    Expanded(flex: 3, child: Text(row.name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                    Expanded(flex: 2, child: Text('${(row.weeklyRate * 100).round()}%', textAlign: TextAlign.center)),
-                    Expanded(flex: 2, child: Text('${(row.monthlyRate * 100).round()}%', textAlign: TextAlign.center)),
-                    Expanded(flex: 2, child: Text('${(row.overallRate * 100).round()}%', textAlign: TextAlign.center)),
-                  ],
-                ),
-              ),
-              if (row != rows.last) const Divider(height: 1, indent: 0),
-            ],
           ],
         ),
       ),
