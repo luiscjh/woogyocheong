@@ -8,6 +8,7 @@ import 'permission_request_management.dart';
 import 'new_family_management.dart';
 import 'new_family_rotation_management.dart';
 import 'small_leader_status_screen.dart';
+import 'our_team_status_screen.dart';
 import '../attendance/attendance_management_screen.dart';
 import '../fee/fee_management_screen.dart';
 import '../visit/visit_slot_management.dart';
@@ -142,6 +143,22 @@ class AdminDashboard extends StatelessWidget {
                   : '${user.midTeam}중팀 소팀장 현황',
               color: Colors.deepPurple,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmallLeaderStatusScreen())),
+            ),
+          ],
+          // 우리팀 현황(주별/월별/전체 기간 출석률)은 중팀장·소팀장 전용 —
+          // 임원팀 이상은 "청년부 현황"에서 전체 범위를 이미 볼 수 있음
+          if (user.role == UserRole.midLeader || user.role == UserRole.smallLeader) ...[
+            const SizedBox(height: 12),
+            _AdminMenuCard(
+              icon: Icons.query_stats_outlined,
+              title: '우리팀 현황',
+              subtitle: user.department == AppTeams.newFamilyTeam
+                  ? '새가족팀 출석률 현황'
+                  : user.role == UserRole.midLeader
+                      ? '${user.midTeam}중팀 출석률 현황'
+                      : '${user.department}팀 출석률 현황',
+              color: Colors.cyan,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OurTeamStatusScreen())),
             ),
           ],
           // 새가족 관리(소팀 배정)는 새가족팀장 전용 — 임원팀은 제외
