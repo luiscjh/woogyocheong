@@ -103,7 +103,8 @@ class ProfileScreen extends StatelessWidget {
                 ),
               ),
             ],
-            if (user.role != UserRole.pastor && user.role != UserRole.admin) ...[
+            if (user.role != UserRole.pastor && user.role != UserRole.admin &&
+                !(user.role == UserRole.member && user.department == AppTeams.newFamilyTeam)) ...[
               const SizedBox(height: 20),
               _PermissionRequestSection(user: user),
             ],
