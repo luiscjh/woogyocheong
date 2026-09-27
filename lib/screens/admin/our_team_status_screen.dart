@@ -44,7 +44,7 @@ class OurTeamStatusScreen extends StatelessWidget {
                   (attSnap.data ?? []).where((a) => teamUserIds.contains(a.userId)).toList();
               return _OurTeamStatusBody(
                 teamLabel: teamLabel,
-                totalMembers: teamMembers.length,
+                members: teamMembers,
                 attendance: teamAttendance,
               );
             },
@@ -57,25 +57,29 @@ class OurTeamStatusScreen extends StatelessWidget {
 
 class _OurTeamStatusBody extends StatelessWidget {
   final String teamLabel;
-  final int totalMembers;
+  final List<UserModel> members;
   final List<AttendanceModel> attendance;
 
   const _OurTeamStatusBody({
     required this.teamLabel,
-    required this.totalMembers,
+    required this.members,
     required this.attendance,
   });
 
   @override
   Widget build(BuildContext context) {
+    final totalMembers = members.length;
     // 날짜(서비스 일자)별 출석 인원을 한 번의 순회로 집계 — 전원 결석한 날도
     // dayKeys에는 남아 0%로 표시되도록, isPresent와 무관하게 날짜 키를 모음
     final presentCountByDay = <String, int>{};
     final dayKeysSet = <String>{};
+    // 개인별 출석률 계산용 — 회원별로 날짜 키에 대한 출석 여부를 기록
+    final attendanceByUser = <String, Map<String, bool>>{};
     for (final a in attendance) {
       final key = AttendanceModel.dateKey(a.date);
       dayKeysSet.add(key);
       if (a.isPresent) presentCountByDay[key] = (presentCountByDay[key] ?? 0) + 1;
+      attendanceByUser.putIfAbsent(a.userId, () => {})[key] = a.isPresent;
     }
     final dayKeys = dayKeysSet.toList()..sort();
 
@@ -111,6 +115,24 @@ class _OurTeamStatusBody extends StatelessWidget {
     final recentMonths =
         monthKeysOrdered.length > 6 ? monthKeysOrdered.sublist(monthKeysOrdered.length - 6) : monthKeysOrdered;
 
+    // 개인별 출석률: 주별=가장 최근 서비스 일자 출석 여부, 월별=이번 달 출석일 비율,
+    // 전체=전체 기간 출석일 비율. 이름 순으로 정렬
+    final lastDayKey = dayKeys.last;
+    final currentMonth = monthKeysOrdered.last;
+    final currentMonthDayCount = dayCountByMonth[currentMonth] ?? 1;
+    final memberRows = members.map((m) {
+      final records = attendanceByUser[m.uid] ?? const {};
+      final presentInMonth = dayKeys.where((k) => k.startsWith(currentMonth) && records[k] == true).length;
+      final presentOverall = dayKeys.where((k) => records[k] == true).length;
+      return _MemberRateRow(
+        name: m.name,
+        weeklyRate: records[lastDayKey] == true ? 1.0 : 0.0,
+        monthlyRate: presentInMonth / currentMonthDayCount,
+        overallRate: presentOverall / dayKeys.length,
+      );
+    }).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -144,6 +166,9 @@ class _OurTeamStatusBody extends StatelessWidget {
           firstDate: dayKeys.first,
           lastDate: dayKeys.last,
         ),
+        const SizedBox(height: 20),
+        const _SectionTitle('개인별 출석률'),
+        _MemberRateCard(rows: memberRows),
       ],
     );
   }
@@ -261,6 +286,72 @@ class _OverallRateCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text('총 $serviceDayCount회 출석 체크 · $firstDate ~ $lastDate',
                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MemberRateRow {
+  final String name;
+  final double weeklyRate;
+  final double monthlyRate;
+  final double overallRate;
+
+  const _MemberRateRow({
+    required this.name,
+    required this.weeklyRate,
+    required this.monthlyRate,
+    required this.overallRate,
+  });
+}
+
+class _MemberRateCard extends StatelessWidget {
+  final List<_MemberRateRow> rows;
+  const _MemberRateCard({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Text('표시할 팀원이 없습니다.', style: TextStyle(color: AppColors.textSecondary)),
+        ),
+      );
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  Expanded(flex: 3, child: Text('이름', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
+                  Expanded(flex: 2, child: Text('주별', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
+                  Expanded(flex: 2, child: Text('월별', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
+                  Expanded(flex: 2, child: Text('전체', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            for (final row in rows) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  children: [
+                    Expanded(flex: 3, child: Text(row.name, style: const TextStyle(fontWeight: FontWeight.w600))),
+                    Expanded(flex: 2, child: Text('${(row.weeklyRate * 100).round()}%', textAlign: TextAlign.center)),
+                    Expanded(flex: 2, child: Text('${(row.monthlyRate * 100).round()}%', textAlign: TextAlign.center)),
+                    Expanded(flex: 2, child: Text('${(row.overallRate * 100).round()}%', textAlign: TextAlign.center)),
+                  ],
+                ),
+              ),
+              if (row != rows.last) const Divider(height: 1, indent: 0),
+            ],
           ],
         ),
       ),
