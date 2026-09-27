@@ -191,16 +191,13 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
   }
 
   Future<void> _importFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['csv'],
-      withData: true, // 웹 호환: bytes로 직접 읽기
     );
-    if (result == null) return;
+    if (file == null) return;
 
-    final file = result.files.single;
-    final bytes = file.bytes;
-    if (bytes == null) return;
+    final bytes = await file.readAsBytes();
 
     try {
       // String.fromCharCodes는 UTF-8을 디코딩하지 않고 바이트를 그대로 문자

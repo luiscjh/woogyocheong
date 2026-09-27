@@ -996,19 +996,101 @@
     (승인 기록 삭제, 테스트 계정을 관리자/A-1으로 원복)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[15차 작업] 2026-09-27
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 안드로이드 개발/실기 테스트 환경 최초 구축 및 Google 로그인 연동
+  - 배경: 안드로이드 휴대전화는 없지만 태블릿(갤럭시 탭 S9 Ultra)이
+    준비됐다며 안드로이드 테스트를 시작하자는 요청. 이 맥에는 Android
+    SDK가 아예 없어 처음부터 구축
+  - Homebrew로 android-commandlinetools(sdkmanager 등) 설치, 별도로
+    OpenJDK 21(캐스크 대신 sudo 불필요한 formula로 설치)도 설치.
+    sdkmanager로 platform-tools/platforms;android-35,36/build-tools
+    35.0.0,36.0.0 설치 후 라이선스 전체 동의, `flutter config
+    --android-sdk`로 Flutter에 SDK 경로 등록. ~/.zshrc에 관련
+    PATH/JAVA_HOME/ANDROID_HOME을 영구 등록해 다음 세션에도 유지되게 함
+  - 태블릿은 처음엔 "USB 디버깅"이 안 보인다고 했는데, 알고 보니
+    일반 USB 연결 방식 선택 화면("USB 테더링" 등)과 개발자 옵션 안의
+    USB 디버깅을 혼동한 것이었음 — 빌드 번호 7번 탭으로 개발자 옵션을
+    켜고 그 안의 USB 디버깅을 켜서 해결. adb devices로 정상 인식
+    확인(SM-X910)
+  - `flutter build apk --debug` 최초 시도 시 file_picker 8.3.7이
+    자체 android/build.gradle에 compileSdk 34를 하드코딩해 두고
+    있어서, flutter_plugin_android_lifecycle이 요구하는 API 36과
+    충돌해 빌드 실패. file_picker/share_plus를 최신 메이저(13.x)로
+    올리는 과정에서 또 다른 문제들을 연쇄적으로 만남:
+    1) file_picker 13.x는 완전히 새 정적 API로 개편됨
+       (`FilePicker.platform.pickFiles()` → `FilePicker.pickFile()`/
+       `pickFiles()`, `withData` 제거 → `PlatformFile.readAsBytes()`).
+       lib/screens/admin/member_management.dart의 CSV 업로드 코드를
+       새 API에 맞게 수정(`FilePicker.pickFile(...)` +
+       `await file.readAsBytes()`)
+    2) file_picker 13.x가 요구하는 windows_file_picker ^2.0.0(→
+       win32 ^6.3.0)가 당시 쓰던 share_plus(<13.0.0, win32 ^5.5.3)와
+       버전 충돌 — share_plus도 13.3.0으로 함께 업그레이드해서 해결
+    3) share_plus 13.3.0으로 막 올렸을 때 안드로이드 네이티브
+       Kotlin 컴파일이 "ShareSuccessManager 등 참조를 찾을 수 없음"
+       오류로 실패. 원인을 추적한 결과, 이 프로젝트의 AGP가 9.0.1로
+       매우 최신이라 AGP 9부터 기본값이 된 "Built-in Kotlin" 체계와
+       충돌하는 것이었음 — share_plus/file_picker(의 실제 구현체인
+       android_file_picker) 모두 자기 build.gradle 안에 "AGP
+       메이저 버전이 9 이상이면 자체적으로 kotlin-android 플러그인을
+       적용하지 않고 AGP의 Built-in Kotlin에 맡긴다"는 조건부 코드를
+       최신 버전에서만 갖고 있었음. 반면 예전에 시도했던 file_picker
+       11.0.3(federation 이전 버전, 구조상 windows_file_picker 의존이
+       없어 잠깐 우회책으로 써봤던 버전)은 이런 AGP9 인지 로직이 아예
+       없어 무조건 실패. 결론: file_picker/share_plus 둘 다 13.x로,
+       android/gradle.properties의 `android.builtInKotlin`을
+       `false`(Flutter 템플릿 기본값)에서 `true`로 변경해야 이 최신
+       AGP/Kotlin 툴체인에서 정상 빌드됨
+    4) 이 과정에서 한 번 생성된 android/app/src/main/java/io/flutter/
+       plugins/GeneratedPluginRegistrant.java가 낡은 file_picker
+       참조를 담은 채 재생성되지 않는 문제도 있어, 해당 파일과
+       .flutter-plugins-dependencies/.flutter-plugins를 지우고
+       `flutter pub get`으로 강제 재생성해서 해결
+  - 최종 조합: file_picker ^13.1.0 / share_plus ^13.3.0 /
+    android.builtInKotlin=true → `flutter build apk --debug` 성공.
+    file_picker 업그레이드로 iOS 쪽도 예전에 쓰던 DKImagePickerController
+    /DKCamera/DKPhotoGallery/SDWebImage/SwiftyGif/TOCropViewController
+    의존성 체인이 자동으로 정리됨(federated 재작성 시 제거된 것,
+    Package.resolved에 반영). flutter analyze 통과(share_plus의
+    Share.shareXFiles가 deprecated라는 정보성 안내만 남음, 동작에는
+    문제 없음), flutter build ios --simulator로 iOS도 회귀 없음을 확인
+  - adb install -r로 APK를 태블릿에 설치·실행해 크래시 없이 뜨는 것을
+    logcat으로 확인. 이어서 사용자가 실제 Google 로그인을 시도해보니
+    로그인 과정(계정 선택 등)은 진행되지만 완료되지 않는 문제 발견 →
+    android/app/google-services.json의 해당 앱 항목에 `oauth_client`가
+    아예 비어 있음(SHA-1 인증서가 Firebase에 한 번도 등록된 적 없었음)을
+    확인. `keytool`로 디버그 키스토어의 SHA-1/SHA-256을 추출한 뒤
+    Firebase CLI(`firebase apps:android:sha:create`)로 두 인증서를
+    모두 등록하고, `firebase apps:sdkconfig ANDROID`로 갱신된
+    google-services.json을 받아 교체
+  - 재빌드/재설치 후에도 여전히 "로그인 과정은 진행되는데 실제 접속이
+    안 된다"는 보고 → adb shell ping으로 태블릿 자체가 인터넷에
+    전혀 연결돼 있지 않음("Network is unreachable")을 확인. USB는
+    ADB 디버깅 전용으로만 연결돼 있어 인터넷이 안 되는 상태였음.
+    사용자가 태블릿을 Wi-Fi에 연결한 뒤 정상적으로 로그인 완료됨을 확인
+  - .gitignore에 `/android/build/`(이번에 처음 생성된 안드로이드
+    빌드 산출물 디렉터리) 추가
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [남은 작업 (TODO)]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  [ ] 13차 작업 커밋 및 push
+  [ ] 15차 작업 커밋 및 push
   [ ] 웹 Google 로그인 COOP 이슈 — iOS 네이티브에서는 정상 동작
         확인됨(11차 작업). 실제 출시엔 영향 없어 우선순위 낮음.
         웹에서도 살리려면 signInWithPopup → signInWithRedirect
         전환 필요
-  [ ] 안드로이드 실기기/에뮬레이터로 Google 로그인 검증 — iOS는
-        11차 작업에서 검증 완료. 안드로이드는 이 맥에 Android SDK가
-        아예 없어서 아직 미착수. 실기기로 확인하려 했으나 사용자에게
-        지금 안드로이드 휴대전화가 없어 불가 — 진행하려면 에뮬레이터
-        설치(Android SDK + 시스템 이미지, 수 GB 다운로드) 필요
+  [ ] 안드로이드 실기기(휴대전화)로도 Google 로그인 검증 — 태블릿
+        (갤럭시 탭 S9 Ultra)으로는 15차 작업에서 검증 완료. 휴대전화는
+        아직 준비되지 않아 미검증
+  [ ] 안드로이드 release 서명 키(release keystore)의 SHA-1을 아직
+        Firebase에 등록하지 않음 — 지금은 debug 서명(디버그 키스토어)
+        SHA-1만 등록돼 있어 `flutter build apk --debug`/`--release`
+        중 debug 서명 빌드만 구글 로그인이 동작함. 스토어 출시용
+        release 키스토어를 만들 때 그 SHA-1도 반드시 함께 등록할 것
   [ ] 앱 패키지명/번들 ID를 com.example.* 플레이스홀더에서
         실제 값으로 교체 (스토어 출시 전 필수, 교체 시 Firebase
         앱 재등록 및 iOS Google 로그인 OAuth 클라이언트 재발급 필요)

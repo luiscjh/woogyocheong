@@ -12,7 +12,20 @@
           "package_name": "com.example.church_youth_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "484620994680-q84cejaiv7cv4jj6v3kdk2mprhp57hbv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.church_youth_app",
+            "certificate_hash": "a88fa8b08a55da48a28b9aeda11f987b94c5328c"
+          }
+        },
+        {
+          "client_id": "484620994680-pt65aa55kg2uufa2r5d60fo5kn47pr4j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyA-qArPggXhxKoV8ZfY5OGvnQgCD_vhhyI"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "484620994680-pt65aa55kg2uufa2r5d60fo5kn47pr4j.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "484620994680-l367tnvmh34iaa6dpv31e0ch2a78feeo.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.churchYouthApp"
+              }
+            }
+          ]
         }
       }
     }
