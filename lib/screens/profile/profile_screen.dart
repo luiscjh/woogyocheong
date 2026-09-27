@@ -9,8 +9,8 @@ import '../../models/permission_request_model.dart';
 import '../../utils/constants.dart';
 import '../../widgets/warning_banner.dart';
 
-// 본인 역할을 스스로 양도할 수 있는 역할 (딱 해당 역할까지만 양도 가능)
-const _transferableRoles = [UserRole.smallLeader, UserRole.midLeader, UserRole.executive, UserRole.pastor];
+// 본인 역할을 스스로 양도할 수 있는 역할 — 목사님만 가능
+const _transferableRoles = [UserRole.pastor];
 
 // 관리자~팀원 권한을 자유롭게 오가며 테스트할 수 있는 전용 계정
 const _testAccountEmail = 'testing@church.com';
@@ -127,17 +127,10 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
+  // 역할 양도는 목사님만 가능 — 소속팀 제한 없이 전체 팀원 중 아무에게나 양도
   List<UserModel> _candidatesFor(UserModel me, List<UserModel> all) {
-    final others = all.where((m) => m.uid != me.uid && m.role == UserRole.member);
-    if (me.role == UserRole.smallLeader) {
-      return others.where((m) => m.department == me.department).toList();
-    } else if (me.role == UserRole.midLeader) {
-      return others.where((m) => m.midTeam == me.midTeam).toList();
-    } else if (me.role == UserRole.executive || me.isPastor) {
-      // 임원팀과 목사님은 소속팀 제한 없이 전체 팀원 중 아무에게나 양도 가능
-      return others.toList();
-    }
-    return const [];
+    if (!me.isPastor) return const [];
+    return all.where((m) => m.uid != me.uid && m.role == UserRole.member).toList();
   }
 
   void _showTransferDialog(BuildContext context, UserModel me) {
@@ -283,10 +276,14 @@ class _PermissionRequestSection extends StatelessWidget {
     return 0;
   }
 
+  // 새가족팀 리더는 이미 소팀장이지만, 새가족팀이 아닌 실제 소팀의 소팀장으로도
+  // 신청할 수 있어야 하므로 예외적으로 소팀장 항목을 함께 보여줌
+  bool get _isNewFamilyLeader => user.role == UserRole.smallLeader && user.department == AppTeams.newFamilyTeam;
+
   List<String> get _availableTypes {
     final rank = _roleRank(user.role);
     return [
-      if (rank < 1) PermissionRequestType.smallLeader,
+      if (rank < 1 || _isNewFamilyLeader) PermissionRequestType.smallLeader,
       if (rank < 2) PermissionRequestType.midLeader,
       if (rank < 3) PermissionRequestType.executive,
       if (AppTeams.canJoinMinistryTeam(user.role) && user.ministryTeam.isEmpty) PermissionRequestType.ministryTeam,

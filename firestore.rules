@@ -18,12 +18,12 @@ rules_version = '2';
 //   둔다(프로필 화면의 "테스트 계정 - 역할 전환" 기능과 짝을 이룸). 이 예외가 안전하려면
 //   실제로 그 계정이 먼저 만들어져 있어야 한다(Firebase Auth는 프로젝트 내 이메일 유일성을
 //   보장하므로, 규칙 배포와 함께/직후에 이 계정을 만들어 선점해 둘 것).
-// - 신규 가입 온보딩(소속팀 최초 등록), 콘텐츠팀 팀장의 배너 권한 위임, 역할 양도
-//   (transferRole)처럼 본인 role을 유지한 채 자기 문서 또는 특정 조건의 타인 문서를
-//   갱신해야 하는 정상 흐름을 위한 예외를 users 컬렉션에 별도로 뒀다. 역할 양도는
-//   두 번의 독립된 update(대상자 role 승격 + 본인 role 강등)로 이뤄지는데, 앱이
-//   이를 트랜잭션으로 묶지 않으므로 두 번째 쓰기가 실패하면 두 사람이 같은 역할을
-//   동시에 갖는 상태가 남을 수 있다 — 추후 WriteBatch로 원자화하는 것을 권장한다.
+// - 신규 가입 온보딩(소속팀 최초 등록), 콘텐츠팀 팀장의 배너 권한 위임처럼 본인
+//   role을 유지한 채 자기 문서 또는 특정 조건의 타인 문서를 갱신해야 하는 정상
+//   흐름을 위한 예외를 users 컬렉션에 별도로 뒀다. 역할 양도(transferRole)는
+//   목사님만 가능하며, 목사님은 isAdmin()으로 이미 모든 users 문서 쓰기가
+//   허용되므로 별도 예외가 필요 없다(두 번의 독립된 update로 이뤄지지만, 관리자
+//   본인이 하는 작업이라 role 제약 없이 통과됨).
 // - 알려진 단순화: 소팀장이 "본인 소팀"만 수정할 수 있어야 하는 세부 제약(부서 일치
 //   검사)은 여기서 강제하지 않았다. 지금은 소팀장 이상이면 누구나 출석/회비/명단을
 //   수정할 수 있다 — 다른 팀 기록까지 건드릴 수 있다는 뜻이므로, 추후 부서 일치
@@ -60,10 +60,6 @@ service cloud.firestore {
     function isContentTeamLead() {
       return isRegistered() && myData().ministryTeam == '콘텐츠팀' && myData().isMinistryLead == true;
     }
-    // 역할 양도(transferRole) 대상이 될 수 있는 계층 — admin/pastor는 isAdmin()으로 이미 커버됨
-    function isTransferableRole(role) {
-      return role in ['small_leader', 'mid_leader', 'executive'];
-    }
 
     // ── users ───────────────────────────────────────────────────────
     match /users/{uid} {
@@ -76,7 +72,8 @@ service cloud.firestore {
       allow update: if
         // 일반 정보(이름/연락처/소속팀 등) 수정: 소팀장 이상, role은 그대로
         (isSmallLeader() && request.resource.data.role == resource.data.role) ||
-        // role 변경(승급/강등)은 관리자만
+        // role 변경(승급/강등)은 관리자만 — 역할 양도(transferRole)도 목사님만
+        // 가능하므로 여기 isAdmin()으로 이미 커버됨(별도 예외 불필요)
         isAdmin() ||
         // QA 테스트 계정은 본인 role을 스스로 전환 가능
         (isTestAccount() && isOwner(uid)) ||
@@ -85,11 +82,7 @@ service cloud.firestore {
         (isOwner(uid) && resource.data.role == 'member' && request.resource.data.role == 'member' &&
          resource.data.department == '' && request.resource.data.department != '') ||
         // 콘텐츠팀 팀장이 팀원의 사역팀 소속/배너 권한 위임을 관리 (role은 못 바꿈)
-        (isContentTeamLead() && request.resource.data.role == resource.data.role) ||
-        // 역할 양도 1/2: 소팀장~임원팀장이 본인의 현재 역할을 그대로 다른 사람에게 넘겨줌
-        (isRegistered() && isTransferableRole(myData().role) && request.resource.data.role == myData().role) ||
-        // 역할 양도 2/2: 넘겨준 본인은 팀원으로 강등
-        (isOwner(uid) && isTransferableRole(myData().role) && request.resource.data.role == 'member');
+        (isContentTeamLead() && request.resource.data.role == resource.data.role);
       allow delete: if isAdmin() ||
         (isSmallLeader() && !(resource.data.role in ['admin', 'pastor', 'executive', 'mid_leader']));
     }

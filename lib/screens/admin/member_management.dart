@@ -580,7 +580,7 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
-    // 임원팀/중팀장 이상 역할은 사역팀에 소속될 수 없으므로 방어적으로 초기화
+    // 임원팀 역할은 사역팀에 소속될 수 없으므로 방어적으로 초기화
     final canJoinMinistry = AppTeams.canJoinMinistryTeam(_role);
     final effectiveMinistryTeam = canJoinMinistry ? _ministryTeam : '';
     final effectiveIsMinistryLead = canJoinMinistry ? _isMinistryLead : false;
@@ -709,7 +709,7 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
                     .toList(),
                 onChanged: (v) => setState(() {
                   _role = v!;
-                  // 임원팀/중팀장 이상은 사역팀에 소속될 수 없으므로 선택을 초기화
+                  // 임원팀은 사역팀에 소속될 수 없으므로 선택을 초기화
                   if (!AppTeams.canJoinMinistryTeam(_role)) {
                     _ministryTeam = '';
                     _isMinistryLead = false;

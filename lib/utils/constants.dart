@@ -62,11 +62,9 @@ class AppTeams {
   // 현재 존재하는 사역팀 목록 (추후 다른 사역팀 추가 시 여기에 등록)
   static const ministryTeams = [contentTeam];
 
-  // 사역팀에 소속될 수 있는 역할: 일반 팀원, 소팀장까지만.
-  // 임원팀/중팀장/(향후) 사역팀장은 이미 팀 하나를 이끄는 역할이므로
-  // 별도의 사역팀 팀원으로는 소속될 수 없음
-  static bool canJoinMinistryTeam(String role) =>
-      role == UserRole.member || role == UserRole.smallLeader;
+  // 사역팀은 역할과 무관하게 중복으로 소속될 수 있는 별도 축이지만,
+  // 임원팀만은 예외 — 임원팀은 그 역할 외에 다른 역할/소속을 겸할 수 없음
+  static bool canJoinMinistryTeam(String role) => role != UserRole.executive;
 
   // X-0 = 중팀장 가상 소속팀, X-1~4 = 실제 소팀
   static const allDepts = [
