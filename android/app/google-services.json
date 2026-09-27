@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "484620994680-7dgvn216f360lbk58a1bqvhlafg4bh2h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.church_youth_app",
+            "certificate_hash": "51ee0d1b3d6b33461dc0a6250c3a07121c1e7ee9"
+          }
+        },
+        {
           "client_id": "484620994680-q84cejaiv7cv4jj6v3kdk2mprhp57hbv.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
