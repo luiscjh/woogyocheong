@@ -245,6 +245,12 @@ class _VisitRequestFormState extends State<_VisitRequestForm> {
                 labelText: '신청 사유 (선택사항)',
                 prefixIcon: Icon(Icons.notes),
               ),
+              // maxLines>1일 때 Flutter가 기본으로 고르는 TextInputType.multiline이
+              // 일부 iOS 실기기에서 한글 자판 자체가 뜨지 않고 영문 자판으로만
+              // 나오는 원인으로 보여, 다른(정상 동작하는) 필드들과 동일하게
+              // keyboardType을 text로 명시해 강제함
+              keyboardType: TextInputType.text,
+              textInputAction: TextInputAction.newline,
               maxLines: 3,
             ),
             const SizedBox(height: 24),
