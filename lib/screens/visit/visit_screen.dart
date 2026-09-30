@@ -250,7 +250,6 @@ class _VisitRequestFormState extends State<_VisitRequestForm> {
               // 나오는 원인으로 보여, 다른(정상 동작하는) 필드들과 동일하게
               // keyboardType을 text로 명시해 강제함
               keyboardType: TextInputType.text,
-              textInputAction: TextInputAction.newline,
               maxLines: 3,
             ),
             const SizedBox(height: 24),
