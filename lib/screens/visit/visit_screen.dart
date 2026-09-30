@@ -230,33 +230,13 @@ class _VisitRequestFormState extends State<_VisitRequestForm> {
               ],
             ),
             const SizedBox(height: 12),
-            StreamBuilder<List<VisitSlotModel>>(
-              stream: widget.service.streamVisitSlots(),
-              builder: (ctx, snap) {
-                final now = DateTime.now();
-                final slots = (snap.data ?? []).where((s) => s.dateTime.isAfter(now)).toList();
-                // 목록이 바뀌어 더는 유효하지 않은 선택값이면 초기화
-                if (_preferredDate != null && !slots.any((s) => s.dateTime == _preferredDate)) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) setState(() => _preferredDate = null);
-                  });
-                }
-                return DropdownButtonFormField<DateTime>(
-                  initialValue: _preferredDate,
-                  decoration: const InputDecoration(
-                    labelText: '선호 시간 선택 (선택사항)',
-                    prefixIcon: Icon(Icons.calendar_today),
-                  ),
-                  hint: Text(slots.isEmpty ? '열려 있는 시간대가 없습니다' : '선호 시간 선택'),
-                  items: slots
-                      .map((s) => DropdownMenuItem(
-                            value: s.dateTime,
-                            child: Text(DateFormat('MM/dd (E) HH:mm', 'ko').format(s.dateTime)),
-                          ))
-                      .toList(),
-                  onChanged: slots.isEmpty ? null : (v) => setState(() => _preferredDate = v),
-                );
-              },
+            // 실시간 스트림(선호 시간 목록)을 별도 위젯으로 분리 — 이 화면(Form) 전체가
+            // Firestore 갱신마다 setState로 다시 빌드되면, 바로 아래 "신청 사유"
+            // 입력 중이던 한글 조합(IME composing)이 매 업데이트마다 끊겨 한글이
+            // 입력되지 않는 문제가 있어 스트림의 재빌드 범위를 이 위젯 안으로 격리함
+            _PreferredTimeField(
+              service: widget.service,
+              onChanged: (v) => _preferredDate = v,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -284,6 +264,60 @@ class _VisitRequestFormState extends State<_VisitRequestForm> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// 열려 있는 심방 시간대를 실시간으로 구독하는 드롭다운. 별도 위젯으로 분리해
+// Firestore 갱신에 따른 재빌드가 이 위젯 안에서만 일어나도록 격리한다
+// (부모 Form까지 재빌드되면 옆의 "신청 사유" 입력란의 한글 조합이 끊길 수 있음)
+class _PreferredTimeField extends StatefulWidget {
+  final FirestoreService service;
+  final ValueChanged<DateTime?> onChanged;
+
+  const _PreferredTimeField({required this.service, required this.onChanged});
+
+  @override
+  State<_PreferredTimeField> createState() => _PreferredTimeFieldState();
+}
+
+class _PreferredTimeFieldState extends State<_PreferredTimeField> {
+  DateTime? _preferredDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<VisitSlotModel>>(
+      stream: widget.service.streamVisitSlots(),
+      builder: (ctx, snap) {
+        final now = DateTime.now();
+        final slots = (snap.data ?? []).where((s) => s.dateTime.isAfter(now)).toList();
+        // 목록이 바뀌어 더는 유효하지 않은 선택값이면 초기화
+        if (_preferredDate != null && !slots.any((s) => s.dateTime == _preferredDate)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _preferredDate = null);
+          });
+        }
+        return DropdownButtonFormField<DateTime>(
+          initialValue: _preferredDate,
+          decoration: const InputDecoration(
+            labelText: '선호 시간 선택 (선택사항)',
+            prefixIcon: Icon(Icons.calendar_today),
+          ),
+          hint: Text(slots.isEmpty ? '열려 있는 시간대가 없습니다' : '선호 시간 선택'),
+          items: slots
+              .map((s) => DropdownMenuItem(
+                    value: s.dateTime,
+                    child: Text(DateFormat('MM/dd (E) HH:mm', 'ko').format(s.dateTime)),
+                  ))
+              .toList(),
+          onChanged: slots.isEmpty
+              ? null
+              : (v) {
+                  setState(() => _preferredDate = v);
+                  widget.onChanged(v);
+                },
+        );
+      },
     );
   }
 }
