@@ -8,6 +8,7 @@ import '../../models/visit_model.dart';
 import '../../models/visit_slot_model.dart';
 import '../../utils/constants.dart';
 import '../../widgets/warning_banner.dart';
+import 'visit_slot_management.dart';
 
 class VisitScreen extends StatelessWidget {
   const VisitScreen({super.key});
@@ -378,31 +379,45 @@ class _AdminVisitView extends StatelessWidget {
         final visits = snap.data ?? [];
         final pending = visits.where((v) => v.status == 'pending').length;
 
-        return Column(
-          children: [
-            if (pending > 0)
-              Container(
-                padding: const EdgeInsets.all(12),
-                color: AppColors.warning.withValues(alpha: 0.1),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline, color: AppColors.warning),
-                    const SizedBox(width: 8),
-                    Text('대기 중인 신청 $pending건',
-                        style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600)),
-                  ],
+        return Scaffold(
+          body: Column(
+            children: [
+              if (pending > 0)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  color: AppColors.warning.withValues(alpha: 0.1),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: AppColors.warning),
+                      const SizedBox(width: 8),
+                      Text('대기 중인 신청 $pending건',
+                          style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
                 ),
+              Expanded(
+                child: visits.isEmpty
+                    ? const Center(child: Text('신청된 심방이 없습니다.'))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: visits.length,
+                        itemBuilder: (ctx, i) => _AdminVisitCard(visit: visits[i], service: service, canConfirm: canConfirm),
+                      ),
               ),
-            Expanded(
-              child: visits.isEmpty
-                  ? const Center(child: Text('신청된 심방이 없습니다.'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: visits.length,
-                      itemBuilder: (ctx, i) => _AdminVisitCard(visit: visits[i], service: service, canConfirm: canConfirm),
-                    ),
-            ),
-          ],
+            ],
+          ),
+          floatingActionButton: canConfirm
+              ? FloatingActionButton.extended(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const VisitSlotManagementScreen()),
+                  ),
+                  icon: const Icon(Icons.schedule_outlined),
+                  label: const Text('심방 시간 관리'),
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                )
+              : null,
         );
       },
     );

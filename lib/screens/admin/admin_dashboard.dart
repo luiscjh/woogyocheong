@@ -11,7 +11,6 @@ import 'small_leader_status_screen.dart';
 import 'our_team_status_screen.dart';
 import '../attendance/attendance_management_screen.dart';
 import '../fee/fee_management_screen.dart';
-import '../visit/visit_slot_management.dart';
 import 'ministry_meeting_screen.dart';
 import 'stats_dashboard_screen.dart';
 
@@ -190,16 +189,6 @@ class AdminDashboard extends StatelessWidget {
               subtitle: '홈 화면 배너 이미지 업로드 및 관리',
               color: Colors.orange,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BannerManagementScreen())),
-            ),
-          ],
-          if (auth.isPastor) ...[
-            const SizedBox(height: 12),
-            _AdminMenuCard(
-              icon: Icons.schedule_outlined,
-              title: '심방 시간 관리',
-              subtitle: '심방 신청 시 선택 가능한 시간대 등록 및 관리',
-              color: Colors.teal,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VisitSlotManagementScreen())),
             ),
           ],
           if (auth.isAdmin) ...[
