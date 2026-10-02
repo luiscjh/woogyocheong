@@ -42,6 +42,7 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    function isPastor() { return isRegistered() && myData().role == 'pastor'; }
     function isAdmin() { return isRegistered() && myData().role in ['admin', 'pastor']; }
     function isExecutive() { return isAdmin() || (isRegistered() && myData().role == 'executive'); }
     function isMidLeader() { return isExecutive() || (isRegistered() && myData().role == 'mid_leader'); }
@@ -104,10 +105,13 @@ service cloud.firestore {
     }
 
     // ── visits (심방 신청) ────────────────────────────────────────────
+    // 심방 사유·연락처 등 민감한 개인정보를 담고 있어, 다른 컬렉션과 달리
+    // "로그인했으면 폭넓게 읽기 허용"하는 전역 원칙의 예외로 둠 — 본인 신청
+    // 내역 또는 목사님만 읽을 수 있다(앱 UI도 동일하게 isPastor로 분기)
     match /visits/{visitId} {
-      allow read: if isSignedIn();
+      allow read: if isOwner(resource.data.userId) || isPastor();
       allow create: if isOwner(request.resource.data.userId);
-      allow update: if isSmallLeader();
+      allow update: if isPastor();
       allow delete: if isAdmin();
     }
     match /visitSlots/{slotId} {
