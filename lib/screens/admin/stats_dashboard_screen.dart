@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../models/attendance_model.dart';
@@ -7,7 +9,7 @@ import '../../models/visit_model.dart';
 import '../../models/permission_request_model.dart';
 import '../../utils/constants.dart';
 
-// 관리자용 청년부 전체 현황 요약 대시보드: 회원/출석/회비/심방 현황을 한눈에 확인
+// 관리자/임원팀용 청년부 전체 현황 요약 대시보드: 회원/출석/회비/심방 현황을 한눈에 확인
 class StatsDashboardScreen extends StatelessWidget {
   const StatsDashboardScreen({super.key});
 
@@ -15,6 +17,10 @@ class StatsDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final service = FirestoreService();
     final now = DateTime.now();
+    // 심방 신청 데이터는 Firestore 규칙상 본인 또는 목사님만 읽을 수 있어,
+    // 목사님이 아닌 열람자(임원팀 등)에게는 streamAllVisits를 구독하지 않고
+    // "심방 신청 현황" 카드 자체를 숨김(권한 거부 오류를 피하기 위함)
+    final isPastor = context.watch<AuthProvider>().currentUser!.isPastor;
 
     return Scaffold(
       appBar: AppBar(title: const Text('청년부 현황')),
@@ -37,26 +43,28 @@ class StatsDashboardScreen extends StatelessWidget {
                 builder: (ctx, feeSnap) {
                   final fees = feeSnap.data ?? [];
 
+                  Widget buildBody(List<VisitModel> visits) {
+                    return StreamBuilder<List<PermissionRequestModel>>(
+                      stream: service.streamPermissionRequests(),
+                      builder: (ctx, reqSnap) {
+                        final permissionRequests = reqSnap.data ?? [];
+                        return _DashboardBody(
+                          members: members,
+                          attendance: attendance,
+                          fees: fees,
+                          visits: visits,
+                          showVisitStats: isPastor,
+                          permissionRequests: permissionRequests,
+                          now: now,
+                        );
+                      },
+                    );
+                  }
+
+                  if (!isPastor) return buildBody(const []);
                   return StreamBuilder<List<VisitModel>>(
                     stream: service.streamAllVisits(),
-                    builder: (ctx, visitSnap) {
-                      final visits = visitSnap.data ?? [];
-
-                      return StreamBuilder<List<PermissionRequestModel>>(
-                        stream: service.streamPermissionRequests(),
-                        builder: (ctx, reqSnap) {
-                          final permissionRequests = reqSnap.data ?? [];
-                          return _DashboardBody(
-                            members: members,
-                            attendance: attendance,
-                            fees: fees,
-                            visits: visits,
-                            permissionRequests: permissionRequests,
-                            now: now,
-                          );
-                        },
-                      );
-                    },
+                    builder: (ctx, visitSnap) => buildBody(visitSnap.data ?? []),
                   );
                 },
               );
@@ -73,6 +81,7 @@ class _DashboardBody extends StatelessWidget {
   final List<AttendanceModel> attendance;
   final List<FeeModel> fees;
   final List<VisitModel> visits;
+  final bool showVisitStats;
   final List<PermissionRequestModel> permissionRequests;
   final DateTime now;
 
@@ -81,6 +90,7 @@ class _DashboardBody extends StatelessWidget {
     required this.attendance,
     required this.fees,
     required this.visits,
+    required this.showVisitStats,
     required this.permissionRequests,
     required this.now,
   });
@@ -133,9 +143,11 @@ class _DashboardBody extends StatelessWidget {
           total: members.length,
           rate: feeRate,
         ),
-        const SizedBox(height: 20),
-        const _SectionTitle('심방 신청 현황'),
-        _VisitStatusCard(counts: visitCounts, total: visits.length),
+        if (showVisitStats) ...[
+          const SizedBox(height: 20),
+          const _SectionTitle('심방 신청 현황'),
+          _VisitStatusCard(counts: visitCounts, total: visits.length),
+        ],
         if (pendingRequestCount > 0) ...[
           const SizedBox(height: 20),
           _PendingActionCard(

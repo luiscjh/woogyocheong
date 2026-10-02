@@ -43,7 +43,7 @@ class AdminDashboard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          if (auth.isAdmin) ...[
+          if (auth.isExecutive) ...[
             _AdminMenuCard(
               icon: Icons.dashboard_outlined,
               title: '청년부 현황',
