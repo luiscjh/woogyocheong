@@ -485,7 +485,6 @@ const _testRoleOptions = [
   _RoleOption('새가족팀 리더', UserRole.smallLeader, AppTeams.newFamilyTeam),
   _RoleOption('새가족팀 팀장', UserRole.midLeader, AppTeams.newFamilyTeam),
   // 사역팀은 department와 독립된 축이라 role=팀원 + 실제 소속팀(A-1)을 유지한 채 ministryTeam만 부여
-  _RoleOption('콘텐츠팀 팀원', UserRole.member, 'A-1', ministryTeam: AppTeams.contentTeam),
   _RoleOption('콘텐츠팀 팀장', UserRole.member, 'A-1', ministryTeam: AppTeams.contentTeam, isMinistryLead: true),
 ];
 
