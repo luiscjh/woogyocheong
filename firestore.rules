@@ -112,7 +112,7 @@ service cloud.firestore {
       allow read: if isOwner(resource.data.userId) || isPastor();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isPastor();
-      allow delete: if isAdmin();
+      allow delete: if isPastor();
     }
     match /visitSlots/{slotId} {
       allow read: if isSignedIn();

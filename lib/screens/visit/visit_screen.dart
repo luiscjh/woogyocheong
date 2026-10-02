@@ -8,6 +8,7 @@ import '../../models/visit_model.dart';
 import '../../models/visit_slot_model.dart';
 import '../../utils/constants.dart';
 import '../../widgets/warning_banner.dart';
+import '../../widgets/confirm_dialog.dart';
 import 'visit_slot_management.dart';
 
 class VisitScreen extends StatelessWidget {
@@ -599,6 +600,13 @@ class _VisitDetailDialog extends StatelessWidget {
         ),
       ),
       actions: [
+        // 심방 신청 삭제는 목사님만 가능 — Firestore 규칙(isPastor)과 동일
+        if (canConfirm)
+          TextButton(
+            onPressed: () => _delete(context),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('삭제'),
+          ),
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('닫기')),
       ],
     );
@@ -606,6 +614,17 @@ class _VisitDetailDialog extends StatelessWidget {
 
   Future<void> _updateStatus(BuildContext context, String status) async {
     await service.updateVisitStatus(visit.id, status, previousStatus: visit.status, visitUserId: visit.userId);
+    if (context.mounted) Navigator.pop(context);
+  }
+
+  Future<void> _delete(BuildContext context) async {
+    final confirm = await confirmDestructiveAction(
+      context,
+      title: '심방 신청 삭제',
+      content: '${visit.userName}님의 심방 신청 내역을 삭제하시겠습니까?',
+    );
+    if (!confirm) return;
+    await service.deleteVisit(visit.id);
     if (context.mounted) Navigator.pop(context);
   }
 }

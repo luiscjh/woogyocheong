@@ -371,6 +371,11 @@ class DemoData {
     _visitsCtrl.add(List.from(_visits));
   }
 
+  void deleteVisit(String id) {
+    _visits.removeWhere((v) => v.id == id);
+    _visitsCtrl.add(List.from(_visits));
+  }
+
   void updateVisitStatus(String id, String status, {String? adminNote}) {
     final idx = _visits.indexWhere((v) => v.id == id);
     if (idx >= 0) {

@@ -182,6 +182,11 @@ class FirestoreService {
     }
   }
 
+  Future<void> deleteVisit(String visitId) async {
+    if (demoMode) { _demo.deleteVisit(visitId); return; }
+    await _db.collection('visits').doc(visitId).delete();
+  }
+
   Stream<List<VisitModel>> streamAllVisits() {
     if (demoMode) return _demo.streamAllVisits();
     return _db.collection('visits')
