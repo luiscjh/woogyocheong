@@ -1502,4 +1502,23 @@
     문법·필드명(userId) 모두 다른 컬렉션의 기존 isOwner 패턴과
     동일하게 작성해 신뢰도 높음
 
+■ "청년부 현황" 대시보드를 임원팀도 볼 수 있게 확장
+  - 배경: "청년부 현황 대시보드는 임원팀도 볼 수 있게 해줘"라는 요청
+  - lib/screens/admin/admin_dashboard.dart의 "청년부 현황" 메뉴
+    노출 조건을 auth.isAdmin → auth.isExecutive로 완화(임원팀
+    role도 포함)
+  - 바로 앞서 강화한 visits 보안 규칙(본인 또는 목사님만 read)과
+    충돌 주의: StatsDashboardScreen이 내부적으로 streamAllVisits()
+    를 구독해 "심방 신청 현황" 카드(상태별 건수)를 보여주는데,
+    임원팀(목사님이 아님)이 그대로 구독하면 Firestore 권한 거부로
+    이어짐. lib/screens/admin/stats_dashboard_screen.dart를 수정해
+    열람자가 목사님일 때만 streamAllVisits()를 구독하고, 목사님이
+    아니면 아예 구독하지 않은 채 "심방 신청 현황" 섹션 자체를
+    숨기도록 showVisitStats 플래그를 추가
+  - flutter analyze 통과 확인, flutter build web --release로 재빌드
+    후 클로드-인-크롬으로 테스트 계정을 임원팀으로 전환해 관리
+    메뉴에 "청년부 현황"이 노출되고, 화면 진입 시 회원/출석/회비
+    카드는 정상 표시되며 오류 없이 "심방 신청 현황" 섹션만 깔끔히
+    빠져 있음을 확인
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
