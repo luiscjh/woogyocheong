@@ -16,7 +16,7 @@ class SmallLeaderStatusScreen extends StatelessWidget {
     final service = FirestoreService();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('소팀장 현황')),
+      appBar: AppBar(title: const Text('리더 현황')),
       body: StreamBuilder<List<UserModel>>(
         stream: service.streamAllMembers(),
         builder: (ctx, snap) {

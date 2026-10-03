@@ -136,10 +136,10 @@ class AdminDashboard extends StatelessWidget {
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.badge_outlined,
-              title: '소팀장 현황',
+              title: '리더 현황',
               subtitle: user.department == AppTeams.newFamilyTeam
                   ? '새가족팀 리더 현황'
-                  : '${user.midTeam}중팀 소팀장 현황',
+                  : '${user.midTeam}중팀 리더 현황',
               color: Colors.deepPurple,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmallLeaderStatusScreen())),
             ),
