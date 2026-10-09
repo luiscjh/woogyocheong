@@ -47,10 +47,62 @@
               "client_type": 3
             },
             {
-              "client_id": "484620994680-l367tnvmh34iaa6dpv31e0ch2a78feeo.apps.googleusercontent.com",
+              "client_id": "484620994680-6538cuv1v59k2otpe28ibffm6t3hvbg1.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.churchYouthApp"
+                "bundle_id": "com.woogyocheong.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:484620994680:android:5cadc5166284af212b058d",
+        "android_client_info": {
+          "package_name": "com.woogyocheong.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "484620994680-6i8hgssgi5t0es1pq8jm7sljs0t5elfd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.woogyocheong.app",
+            "certificate_hash": "a88fa8b08a55da48a28b9aeda11f987b94c5328c"
+          }
+        },
+        {
+          "client_id": "484620994680-ghjdtfja61r13i5b4tbi8iodal51lfh4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.woogyocheong.app",
+            "certificate_hash": "51ee0d1b3d6b33461dc0a6250c3a07121c1e7ee9"
+          }
+        },
+        {
+          "client_id": "484620994680-pt65aa55kg2uufa2r5d60fo5kn47pr4j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-qArPggXhxKoV8ZfY5OGvnQgCD_vhhyI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "484620994680-pt65aa55kg2uufa2r5d60fo5kn47pr4j.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "484620994680-6538cuv1v59k2otpe28ibffm6t3hvbg1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.woogyocheong.app"
               }
             }
           ]

@@ -47,4 +47,5 @@ app.*.map.json
 
 # Firebase tools
 .firebase-tools/
+.firebase/
 firebase-debug.log

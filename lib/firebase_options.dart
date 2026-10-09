@@ -33,7 +33,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyA-qArPggXhxKoV8ZfY5OGvnQgCD_vhhyI',
-    appId: '1:484620994680:android:e1b6162b7fe689652b058d',
+    appId: '1:484620994680:android:5cadc5166284af212b058d',
     messagingSenderId: '484620994680',
     projectId: 'conference-c9c99',
     storageBucket: 'conference-c9c99.firebasestorage.app',
@@ -45,12 +45,13 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBKbli8uFIMueKn0ri8XVnZ3Yh9KO8ivEQ',
-    appId: '1:484620994680:ios:de71546eb58733652b058d',
+    appId: '1:484620994680:ios:8f1d6cc1a9e8709d2b058d',
     messagingSenderId: '484620994680',
     projectId: 'conference-c9c99',
     storageBucket: 'conference-c9c99.firebasestorage.app',
-    iosClientId: '484620994680-l367tnvmh34iaa6dpv31e0ch2a78feeo.apps.googleusercontent.com',
-    iosBundleId: 'com.example.churchYouthApp',
+    androidClientId: '484620994680-6i8hgssgi5t0es1pq8jm7sljs0t5elfd.apps.googleusercontent.com',
+    iosClientId: '484620994680-6538cuv1v59k2otpe28ibffm6t3hvbg1.apps.googleusercontent.com',
+    iosBundleId: 'com.woogyocheong.app',
   );
   // macOS 앱은 Firebase 프로젝트에 아직 등록하지 않았음(모바일 출시가 목표라 후순위)
   static const FirebaseOptions macos = FirebaseOptions(

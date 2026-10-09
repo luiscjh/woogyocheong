@@ -3,9 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>484620994680-l367tnvmh34iaa6dpv31e0ch2a78feeo.apps.googleusercontent.com</string>
+	<string>484620994680-6538cuv1v59k2otpe28ibffm6t3hvbg1.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.484620994680-l367tnvmh34iaa6dpv31e0ch2a78feeo</string>
+	<string>com.googleusercontent.apps.484620994680-6538cuv1v59k2otpe28ibffm6t3hvbg1</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>484620994680-6i8hgssgi5t0es1pq8jm7sljs0t5elfd.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
 	<string>AIzaSyBKbli8uFIMueKn0ri8XVnZ3Yh9KO8ivEQ</string>
 	<key>GCM_SENDER_ID</key>
@@ -13,7 +15,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.example.churchYouthApp</string>
+	<string>com.woogyocheong.app</string>
 	<key>PROJECT_ID</key>
 	<string>conference-c9c99</string>
 	<key>STORAGE_BUCKET</key>
@@ -29,6 +31,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:484620994680:ios:de71546eb58733652b058d</string>
+	<string>1:484620994680:ios:8f1d6cc1a9e8709d2b058d</string>
 </dict>
 </plist>

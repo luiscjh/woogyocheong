@@ -1,4 +1,4 @@
-package com.example.church_youth_app
+package com.woogyocheong.app
 
 import io.flutter.embedding.android.FlutterActivity
 
