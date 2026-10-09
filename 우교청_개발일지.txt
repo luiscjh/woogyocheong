@@ -1157,7 +1157,8 @@
         요금제로 업그레이드 필요 (현재 Spark라 미작동)
   [ ] Firebase Console에서 Google 로그인 활성화 → 완료(10차
         작업에서 처리)
-  [ ] 웹 배포 (Firebase Hosting 또는 Netlify)
+  [ ] 웹 배포 (Firebase Hosting) → 완료(20차 작업,
+        https://conference-c9c99.web.app)
   [ ] 앱 아이콘 및 스플래시 화면 커스터마이징 → 완료(12차 작업)
   [ ] 소팀장이 "본인 소속팀만" 수정 가능해야 하는 세부 제약을
         firestore.rules에 아직 강제하지 않음(알려진 단순화,
@@ -1555,5 +1556,24 @@
   - flutter analyze 통과 확인, 웹/iOS 시뮬레이터 모두 재빌드 후 중팀장
     역할로 전환해 관리 메뉴의 "리더 현황" 카드와 진입한 화면의 AppBar
     제목이 모두 정상 반영됨을 확인
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[20차 작업] 2026-10-09
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 웹을 Firebase Hosting으로 배포
+  - 배경: "웹부터 Firebase Hosting으로 배포해줘"라는 요청. 지금까지 웹은
+    flutter build web --release 후 로컬 python http.server로만 띄워
+    검증했을 뿐, 실제 공개 배포는 한 적이 없었음
+  - firebase.json에 hosting 설정 추가: public을 build/web으로, SPA
+    라우팅을 위해 모든 경로를 index.html로 리라이트하도록 구성
+  - 프로젝트(conference-c9c99)에 이미 기본 Hosting 사이트가 존재함을
+    firebase hosting:sites:list로 확인(별도 사이트 생성 불필요)
+  - flutter build web --release로 재빌드 후 firebase deploy --only
+    hosting --project conference-c9c99로 배포. 배포 완료 후 클로드-인-
+    크롬으로 https://conference-c9c99.web.app 접속해 로그인 화면이
+    정상적으로 렌더링되는 것까지 확인
+  - 참고: firebase CLI(firebase-tools)가 PATH에 기본으로 잡혀있지 않아
+    /Users/choejaehyeon/.npm-global/bin을 PATH에 추가해서 사용함
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
