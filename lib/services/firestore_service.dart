@@ -56,12 +56,24 @@ class FirestoreService {
     await _db.collection('users').doc(uid).delete();
   }
 
-  // 역할 양도: outgoing의 역할/추가 권한을 incoming에게 넘기고 outgoing은 팀원으로 전환
+  // 역할 양도: outgoing의 역할/추가 권한을 incoming에게 넘기고 outgoing은 팀원으로 전환.
+  // 두 문서 갱신을 WriteBatch로 묶어, 한쪽만 반영돼 역할이 중복/유실되는 상태를 막음
+  // (소속팀은 바뀌지 않으므로 소속팀 변경 알림 대상도 아님). role/permissions 두 필드만
+  // 갱신해, 화면이 들고 있던 오래된 값으로 그사이 바뀐 연락처 등을 덮어쓰지 않게 함
   Future<void> transferRole(UserModel outgoing, UserModel incoming) async {
-    await updateUser(incoming.copyWith(role: outgoing.role, permissions: outgoing.permissions),
-        previousDepartment: incoming.department);
-    await updateUser(outgoing.copyWith(role: UserRole.member, permissions: const []),
-        previousDepartment: outgoing.department);
+    final promoted = incoming.copyWith(role: outgoing.role, permissions: outgoing.permissions);
+    final demoted = outgoing.copyWith(role: UserRole.member, permissions: const []);
+    if (demoMode) {
+      _demo.updateUser(promoted);
+      _demo.updateUser(demoted);
+      return;
+    }
+    final batch = _db.batch();
+    batch.update(_db.collection('users').doc(promoted.uid),
+        {'role': promoted.role, 'permissions': promoted.permissions});
+    batch.update(_db.collection('users').doc(demoted.uid),
+        {'role': demoted.role, 'permissions': demoted.permissions});
+    await batch.commit();
   }
 
   Future<void> importMembers(List<UserModel> members) async {

@@ -22,8 +22,8 @@ rules_version = '2';
 //   role을 유지한 채 자기 문서 또는 특정 조건의 타인 문서를 갱신해야 하는 정상
 //   흐름을 위한 예외를 users 컬렉션에 별도로 뒀다. 역할 양도(transferRole)는
 //   목사님만 가능하며, 목사님은 isAdmin()으로 이미 모든 users 문서 쓰기가
-//   허용되므로 별도 예외가 필요 없다(두 번의 독립된 update로 이뤄지지만, 관리자
-//   본인이 하는 작업이라 role 제약 없이 통과됨).
+//   허용되므로 별도 예외가 필요 없다(두 문서 update를 하나의 WriteBatch로 묶어
+//   수행하며, get()은 배치 적용 전 상태를 보므로 목사님 본인 강등 쓰기도 통과됨).
 // - 알려진 단순화: 소팀장이 "본인 소팀"만 수정할 수 있어야 하는 세부 제약(부서 일치
 //   검사)은 여기서 강제하지 않았다. 지금은 소팀장 이상이면 누구나 출석/회비/명단을
 //   수정할 수 있다 — 다른 팀 기록까지 건드릴 수 있다는 뜻이므로, 추후 부서 일치
@@ -84,8 +84,11 @@ service cloud.firestore {
          resource.data.department == '' && request.resource.data.department != '') ||
         // 콘텐츠팀 팀장이 팀원의 사역팀 소속/배너 권한 위임을 관리 (role은 못 바꿈)
         (isContentTeamLead() && request.resource.data.role == resource.data.role);
+      // 본인 문서 삭제는 회원 탈퇴(스토어 정책상 필수) 용도 — 앱은 목사님 본인 탈퇴를 UI에서
+      // 막고 먼저 역할 양도를 안내함
       allow delete: if isAdmin() ||
-        (isSmallLeader() && !(resource.data.role in ['admin', 'pastor', 'executive', 'mid_leader']));
+        (isSmallLeader() && !(resource.data.role in ['admin', 'pastor', 'executive', 'mid_leader'])) ||
+        isOwner(uid);
     }
 
     // ── attendance / fees: 본인 기록은 스스로 기록, 그 외는 소팀장 이상 ──

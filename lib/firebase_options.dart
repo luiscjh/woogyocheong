@@ -38,10 +38,6 @@ class DefaultFirebaseOptions {
     projectId: 'conference-c9c99',
     storageBucket: 'conference-c9c99.firebasestorage.app',
   );
-  // iOS 앱은 Firebase 프로젝트에 등록되어 GoogleService-Info.plist는 실키로
-  // 받아뒀지만, 이 맥의 Ruby 툴체인(xcodeproj gem) 문제로 flutterfire configure가
-  // Xcode 프로젝트 연동 단계에서 중단돼 Podfile 등 네이티브 설정은 아직 미완료임.
-  // 실제 iOS 빌드 전에 flutterfire configure --platforms=ios를 다시 완주해야 함
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBKbli8uFIMueKn0ri8XVnZ3Yh9KO8ivEQ',

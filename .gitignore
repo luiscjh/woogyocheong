@@ -49,3 +49,6 @@ app.*.map.json
 .firebase-tools/
 .firebase/
 firebase-debug.log
+
+# Claude Code 로컬 설정
+.claude/

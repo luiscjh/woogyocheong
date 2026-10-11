@@ -13,6 +13,11 @@ class AppColors {
   static const textSecondary = Color(0xFF757575);
 }
 
+class AppLinks {
+  // web/privacy.html이 Firebase Hosting으로 함께 배포됨 — 스토어 등록정보에도 같은 주소를 입력
+  static const String privacyPolicy = 'https://conference-c9c99.web.app/privacy.html';
+}
+
 class AppStrings {
   static const appName = '우교청';
   static const attendance = '출석체크';

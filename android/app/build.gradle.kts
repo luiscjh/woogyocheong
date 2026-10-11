@@ -15,6 +15,9 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(keystorePropertiesFile.inputStream())
+} else if (gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }) {
+    // release 빌드인데 서명 정보가 없으면 서명 단계의 알아보기 힘든 NPE 대신 원인을 바로 알려줌
+    throw GradleException("android/key.properties가 없어 release 빌드를 서명할 수 없습니다. 업로드 키스토어 정보를 먼저 준비하세요.")
 }
 
 android {
@@ -28,7 +31,6 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.woogyocheong.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -51,13 +53,9 @@ android {
 
     buildTypes {
         release {
-            // key.properties가 없는 환경(예: CI 없이 처음 체크아웃)에서는 디버그 키로
-            // 폴백해 빌드 자체는 계속 가능하게 함
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            // 스토어 업로드용 빌드가 실수로 디버그 키로 서명되지 않도록 폴백을 두지 않음 —
+            // key.properties가 없으면 release 빌드는 서명 단계에서 실패한다(debug 빌드는 영향 없음)
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
@@ -121,6 +122,21 @@ class ProfileScreen extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: () => launchUrl(Uri.parse(AppLinks.privacyPolicy), mode: LaunchMode.externalApplication),
+                  child: const Text('개인정보처리방침', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                ),
+                const Text('|', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                TextButton(
+                  onPressed: () => _confirmDeleteAccount(context, user),
+                  child: const Text('회원 탈퇴', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -192,7 +208,15 @@ class ProfileScreen extends StatelessWidget {
     );
     if (confirm != true || !context.mounted) return;
 
-    await service.transferRole(me, target);
+    try {
+      await service.transferRole(me, target);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('역할 양도에 실패했습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
     if (!context.mounted) return;
 
     context.read<AuthProvider>().setCurrentUser(me.copyWith(role: UserRole.member, permissions: const []));
@@ -200,6 +224,91 @@ class ProfileScreen extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${target.name}님에게 $roleLabel 역할을 양도했습니다.'), backgroundColor: AppColors.success),
     );
+  }
+
+  Future<void> _confirmDeleteAccount(BuildContext context, UserModel me) async {
+    // 목사님 역할은 앱에 한 명만 있어야 하므로, 탈퇴 전에 먼저 양도하도록 안내
+    if (me.isPastor) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('목사님 역할은 탈퇴 전에 먼저 다른 분께 양도해 주세요.')),
+      );
+      return;
+    }
+    // QA용 테스트 계정은 규칙상 본인 역할을 바꿀 수 있는 예외 계정이라, 탈퇴로 이 이메일이
+    // 비면 다른 사람이 같은 이메일로 가입해 그 예외를 가져갈 수 있음 — 탈퇴를 막아 계정을 선점해 둠
+    if (me.email == _testAccountEmail) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('테스트 계정은 탈퇴할 수 없습니다.')),
+      );
+      return;
+    }
+    final auth = context.read<AuthProvider>();
+    final needsPassword = auth.needsPasswordForDeletion;
+    final passwordCtrl = TextEditingController();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('회원 탈퇴'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '탈퇴하면 로그인 계정과 회원 정보(이름, 연락처, 생년월일, 소속 등)가 즉시 삭제되며 되돌릴 수 없습니다.\n\n'
+              '출석·회비·심방·권한 신청 기록과 알림은 청년부 운영 기록으로 남으며, 여기에는 이름(심방 기록은 연락처 포함)이 함께 저장돼 있습니다. '
+              '이 기록의 삭제를 원하시면 개인정보처리방침의 연락처로 요청해 주세요.',
+            ),
+            if (needsPassword) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: '비밀번호 확인'),
+              ),
+            ] else ...[
+              const SizedBox(height: 12),
+              const Text('본인 확인을 위해 Google 로그인을 한 번 더 진행합니다.',
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('탈퇴'),
+          ),
+        ],
+      ),
+    );
+    final password = passwordCtrl.text;
+    // 다이얼로그 닫힘 애니메이션이 끝난 뒤 정리
+    WidgetsBinding.instance.addPostFrameCallback((_) => passwordCtrl.dispose());
+    if (confirm != true || !context.mounted) return;
+
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    // 처리 중 중복 탭 방지용 진행 표시
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(canPop: false, child: Center(child: CircularProgressIndicator())),
+    );
+    final error = await auth.deleteAccount(password: needsPassword ? password : null);
+    nav.pop(); // 진행 표시 닫기
+    // N1: 탈퇴가 중간에 실패해 로그아웃된 경우에도 빈 내 정보 화면이 남지 않게 첫 화면으로 돌아감
+    if (error != null && error.isNotEmpty && auth.currentUser == null) {
+      nav.popUntil((r) => r.isFirst);
+      messenger.showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.error));
+      return;
+    }
+    if (error == null) {
+      nav.popUntil((r) => r.isFirst);
+      messenger.showSnackBar(const SnackBar(content: Text('탈퇴가 완료되었습니다.')));
+    } else if (error.isNotEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.error));
+    }
   }
 
   Future<void> _confirmLogout(BuildContext context) async {

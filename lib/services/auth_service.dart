@@ -114,6 +114,58 @@ class AuthService {
     return userModel;
   }
 
+  // 회원 탈퇴: Firebase는 오래된 로그인 세션으로 계정 삭제를 막으므로(requires-recent-login)
+  // 먼저 본인 확인(재인증)을 받은 뒤, 회원 문서 → 인증 계정 순으로 삭제한다. 인증 계정을
+  // 먼저 지우면 규칙상 본인 문서를 더 이상 지울 수 없기 때문. 출석/회비/심방 기록은
+  // 청년부 운영 기록으로 남는다(개인정보처리방침에 고지). Google 재인증을 취소하면 false
+  Future<bool> deleteAccount({String? password}) async {
+    if (demoMode) {
+      final me = _demoUser;
+      if (me != null) DemoData.instance.deleteUser(me.uid);
+      await signOut();
+      return true;
+    }
+    final user = _auth.currentUser;
+    if (user == null) return false;
+
+    final isPasswordAccount = user.providerData.any((p) => p.providerId == 'password');
+    if (isPasswordAccount) {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: user.email ?? '', password: password ?? ''),
+      );
+    } else if (kIsWeb) {
+      await user.reauthenticateWithPopup(GoogleAuthProvider());
+    } else {
+      // 이미 로그인된 Google 계정이 있으면 signIn()이 화면 없이 바로 통과하므로, 먼저 로그아웃해
+      // 본인 확인 화면(계정 선택)이 실제로 뜨게 함
+      final googleSignIn = GoogleSignIn();
+      await googleSignIn.signOut();
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) return false;
+      final googleAuth = await googleUser.authentication;
+      await user.reauthenticateWithCredential(GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      ));
+    }
+
+    await _firestore.collection('users').doc(user.uid).delete();
+    try {
+      await user.delete();
+    } catch (_) {
+      // 회원 문서는 이미 지워졌으므로 그대로 두면 정보 없는 로그인 상태가 남음 — 로그아웃시키고
+      // 호출부에서 개인정보처리방침의 삭제 요청 경로를 안내
+      await signOut();
+      throw Exception('account-delete-incomplete');
+    }
+    if (!kIsWeb) await GoogleSignIn().signOut();
+    return true;
+  }
+
+  // 탈퇴 시 비밀번호 재확인이 필요한 계정(이메일/비밀번호 로그인)인지
+  bool get needsPasswordForDeletion =>
+      !demoMode && (_auth.currentUser?.providerData.any((p) => p.providerId == 'password') ?? false);
+
   Future<void> resetPassword(String email) async {
     if (demoMode) return; // 데모에서는 아무것도 안 함
     await _auth.sendPasswordResetEmail(email: email);

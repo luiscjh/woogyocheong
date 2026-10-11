@@ -152,6 +152,37 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  bool get needsPasswordForDeletion => _authService.needsPasswordForDeletion;
+
+  // 회원 탈퇴. 성공하면 null, 실패하면 사용자에게 보여줄 오류 문구, 본인 확인을 취소하면 ''
+  Future<String?> deleteAccount({String? password}) async {
+    try {
+      final done = await _authService.deleteAccount(password: password);
+      if (!done) return '';
+      _currentUser = null;
+      _status = AuthStatus.unauthenticated;
+      notifyListeners();
+      return null;
+    } on Exception catch (e) {
+      final msg = e.toString();
+      if (msg.contains('popup-closed-by-user') || msg.contains('cancelled-popup-request')) return '';
+      if (msg.contains('account-delete-incomplete')) {
+        // 서비스에서 이미 로그아웃됨 — 인증 상태 리스너를 기다리지 않고 바로 반영해 화면 분기가 확실히 동작하게 함
+        _currentUser = null;
+        _status = AuthStatus.unauthenticated;
+        notifyListeners();
+        return '회원 정보는 삭제됐지만 로그인 계정 삭제를 마치지 못했습니다. 개인정보처리방침의 삭제 요청 연락처로 알려 주시면 처리해 드립니다.';
+      }
+      if (msg.contains('user-mismatch')) return '가입할 때 사용한 Google 계정으로 본인 확인을 해 주세요.';
+      if (msg.contains('too-many-requests')) return '시도 횟수가 많습니다. 잠시 후 다시 시도해 주세요.';
+      if (msg.contains('wrong-password') || msg.contains('invalid-credential')) {
+        return '비밀번호가 올바르지 않습니다.';
+      }
+      if (msg.contains('network-request-failed')) return '네트워크 연결을 확인해 주세요.';
+      return '탈퇴 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+    }
+  }
+
   Future<bool> resetPassword(String email) async {
     try {
       await _authService.resetPassword(email);
