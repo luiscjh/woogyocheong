@@ -1168,8 +1168,10 @@
   [ ] 스토어 제출 전 소유자 작업(21차 작업 점검 결과)
         - Firebase 콘솔에서 testing@church.com 계정이 실제로 생성돼
           있는지 확인(없으면 누구나 그 이메일로 가입해 권한 상승 가능)
-        - web/privacy.html의 [대괄호] 값(시행일, 교회 이름, Storage 위치,
-          보유 기간, 연락처, 처리 기한, 책임자) 채운 뒤 Hosting 재배포
+        - web/privacy.html의 [대괄호] 값 중 교회 이름, 보호책임자(이름·직책·
+          연락처 이메일) 채운 뒤 Hosting 재배포 — 보유 기간(탈퇴 후 1년),
+          처리 기한(7일), 시행일(2026-10-11, 출시일에 맞춰 수정 예정),
+          Storage 위치(현재 미사용)는 21차 작업에서 반영
         - Play Console 생성, Play 앱 서명 키 SHA-1/SHA-256을 Firebase에 등록,
           데이터 보안 양식, 심사용 계정(테스트 계정 아닌 별도 계정)
         - Apple Developer Program 가입 → Xcode Team 지정, Sign in with
