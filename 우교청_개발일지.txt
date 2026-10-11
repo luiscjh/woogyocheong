@@ -1164,7 +1164,24 @@
         firestore.rules 파일 상단 주석 참고)
   [ ] transferRole(역할 양도)이 트랜잭션으로 묶여 있지 않아
         두 번째 쓰기 실패 시 상태가 꼬일 수 있음 — WriteBatch로
-        원자화 권장
+        원자화 권장 → 완료(21차 작업)
+  [ ] 스토어 제출 전 소유자 작업(21차 작업 점검 결과)
+        - Firebase 콘솔에서 testing@church.com 계정이 실제로 생성돼
+          있는지 확인(없으면 누구나 그 이메일로 가입해 권한 상승 가능)
+        - web/privacy.html의 [대괄호] 값(시행일, 교회 이름, Storage 위치,
+          보유 기간, 연락처, 처리 기한, 책임자) 채운 뒤 Hosting 재배포
+        - Play Console 생성, Play 앱 서명 키 SHA-1/SHA-256을 Firebase에 등록,
+          데이터 보안 양식, 심사용 계정(테스트 계정 아닌 별도 계정)
+        - Apple Developer Program 가입 → Xcode Team 지정, Sign in with
+          Apple 구현(Guideline 4.8), 개인정보 라벨, TestFlight 실기기 검증
+  [ ] 권한 범위 관련 소유자 판단 대기(21차 작업 검사에서 지적)
+        - users 등 대부분 컬렉션 read가 isSignedIn()이라 아무 Google
+          로그인 사용자나 전체 회원 정보 열람 가능(방침에는 사실대로 고지)
+        - isTestAccount()가 이메일 문자열만 비교(email_verified/uid 고정 없음)
+        - 최초 가입 create 규칙이 ministryTeam/isMinistryLead 등 필드를
+          검사하지 않음
+        - 회원 탈퇴 시 출석/회비/심방/권한 신청/알림 기록은 남음(방침 고지,
+          보호책임자가 콘솔에서 수동 삭제)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [14차 작업] 2026-09-26
@@ -1607,5 +1624,62 @@
   - flutter build apk --debug, flutter build ios --debug --simulator 모두
     성공 확인. 웹도 재빌드 후 Firebase Hosting에 재배포. iOS 시뮬레이터도
     재기동해 로그인 화면이 새 번들 ID로 정상 구동되는 것까지 확인
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[21차 작업] 2026-10-11
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 앱스토어/구글 플레이 출시 준비 점검 및 수정 (agents-orchestrator 파이프라인)
+  - 배경: "최종 점검 완료된 우교청 어플리케이션"을 목표로, Reality Checker가
+    두 스토어 등록 가능 여부를 검사하고 코드가 바뀌면 AI-Generated Code
+    Security Auditor가 함께 검토하는 방식으로 진행. 이미 설정된 각 역할의
+    권한 범위는 건드리지 않는 것이 조건(본인 문서 삭제 허용 1건만 사용자 승인)
+  - 1~3차 검사: 두 스토어 모두 NEEDS WORK. 코드로 고칠 수 있는 항목을
+    차례로 수정했고 3회 후 남은 차단 항목(계정 삭제, 개인정보처리방침 등)은
+    사용자 결정을 받아 4~6차에서 추가 구현. 최종 검사 결과 "코드로 남은 차단
+    항목 없음", 보안 감사는 매 차수 PASS
+
+■ 스토어 요건 대응
+  - android/app/build.gradle.kts: release 빌드가 key.properties 없을 때 debug
+    키로 조용히 서명되던 폴백 제거 — 키가 없으면 명확한 한국어 메시지로 실패.
+    템플릿 TODO 주석 삭제
+  - ios/Runner/Info.plist: CFBundleName을 우교청으로, ITSAppUsesNonExemptEncryption
+    =false 추가(HTTPS만 사용해 수출 규정 면제 대상)
+  - ios/Runner/PrivacyInfo.xcprivacy 신규 작성 후 Runner 리소스에 등록: 추적 없음,
+    수집 항목 9종(이름, 이메일, 전화번호, 사용자 ID, 기타 사용자 콘텐츠, 사진,
+    민감정보(교회 소속·출석), 기타 금융정보(회비), 기타(생년월일))
+  - lib/firebase_options.dart의 낡은 "iOS 설정 미완료" 주석 삭제
+
+■ 회원 탈퇴 기능 (Apple 5.1.1(v), Google Play 계정 삭제 정책)
+  - auth_service.dart deleteAccount: 재인증(이메일/비밀번호 계정은 비밀번호,
+    Google 계정은 계정 선택 화면) → users 문서 삭제 → Auth 계정 삭제 순서.
+    Auth 삭제가 실패하면 로그아웃시키고 방침의 삭제 요청 연락처로 안내
+  - profile_screen.dart 하단에 "개인정보처리방침 | 회원 탈퇴" 추가. 목사님은
+    먼저 역할 양도하도록 안내, testing@church.com은 탈퇴 차단(이메일이 비면
+    다른 사람이 그 이메일로 가입해 규칙의 테스트 계정 예외를 가져갈 수 있어서).
+    진행 중 표시와 뒤로가기 차단, 남는 기록 고지 문구 포함
+  - firestore.rules: users delete에 isOwner(uid) 추가(사용자 승인한 유일한
+    권한 변경). 에뮬레이터로 본인 삭제만 허용되고 타인 삭제는 거부됨을 확인
+
+■ 개인정보처리방침
+  - web/privacy.html 신규(빌드 시 build/web으로 복사, https://conference-c9c99
+    .web.app/privacy.html). 수집 항목, 목적, 앱 안 공개 범위(로그인 사용자
+    누구나 열람 가능함을 사실대로 고지), Firebase 위탁·국외 이전, 보유 기간,
+    탈퇴/삭제 요청(#delete 섹션 — Play의 웹 삭제 요청 URL로 사용) 등
+  - 앱 내 링크용 url_launcher 추가, constants.dart에 AppLinks.privacyPolicy
+  - [대괄호] 값은 사용자가 채워야 함(TODO 참고)
+
+■ 역할 양도(transferRole) 개선
+  - firestore_service.dart: 두 문서 갱신을 WriteBatch로 원자화하고 role/
+    permissions 필드만 갱신(오래된 화면 값으로 다른 필드를 덮어쓰지 않게).
+    get()이 배치 적용 전 상태를 보므로 목사님 본인 강등도 규칙 통과 —
+    에뮬레이터로 목사님/관리자 성공, 임원/소팀장 거부 확인. 규칙 상단 주석도 갱신
+  - profile_screen.dart: 양도 실패 시 오류 스낵바
+
+■ 기타
+  - .gitignore에 .claude/ 추가
+  - flutter analyze 오류 0(기존 share_plus deprecated info 2건),
+    flutter build appbundle --release / ios --release --no-codesign / web
+    --release 모두 성공, iOS 시뮬레이터 재기동 반영
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
