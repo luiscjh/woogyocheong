@@ -122,7 +122,7 @@ class _DashboardBody extends StatelessWidget {
           children: [
             Expanded(child: _StatCard(label: '전체 회원', value: '${members.length}명', color: AppColors.primary)),
             const SizedBox(width: 12),
-            Expanded(child: _StatCard(label: '리더 이상', value: '$leaderCount명', color: Colors.deepPurple)),
+            Expanded(child: _StatCard(label: '리더', value: '$leaderCount명', color: Colors.deepPurple)),
           ],
         ),
         const SizedBox(height: 12),

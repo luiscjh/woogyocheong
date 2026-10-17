@@ -38,7 +38,7 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(readOnly ? '회원 조회' : '회원 관리'),
+        title: Text(readOnly ? '회원 조회' : '청년부 명단'),
         actions: readOnly
             ? null
             : [
@@ -323,7 +323,7 @@ class _LeaderAssignedFamilyView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('회원 관리')),
+      appBar: AppBar(title: const Text('청년부 명단')),
       body: StreamBuilder<List<UserModel>>(
         stream: service.streamAllMembers(),
         builder: (ctx, memberSnap) {

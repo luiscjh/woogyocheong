@@ -58,7 +58,7 @@ class AdminDashboard extends StatelessWidget {
           if (auth.isSmallLeader) ...[
             _AdminMenuCard(
               icon: Icons.people_outline,
-              title: '회원 관리',
+              title: '청년부 명단',
               subtitle: user.department == AppTeams.newFamilyTeam
                   ? (user.role == UserRole.smallLeader ? '내 담당 주차 새가족 확인' : '새가족팀 회원 관리')
                   : auth.isExecutive
