@@ -46,7 +46,6 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.14.1
-  flutter_native_splash: ^2.4.3
 
 flutter:
   uses-material-design: true
@@ -59,6 +58,9 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/icon/icon.png"
 
+# flutter_native_splash 패키지는 제거했지만(excel과의 archive 버전 충돌,
+# 아래 참고), 스플래시 재생성이 필요할 때 쓸 설정값이라 남겨둔다 — 이미
+# 생성된 android/ios 스플래시 리소스는 그대로 유지됨
 flutter_native_splash:
   color: "#F5F5F5"
   image: assets/icon/splash.png
