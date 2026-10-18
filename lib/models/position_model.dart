@@ -17,6 +17,15 @@ class PositionDef {
   const PositionDef({required this.id, required this.role, required this.department, this.capacity, this.executiveTitle = ''});
 
   bool get isMultiSeat => capacity == null;
+
+  // 사람이 읽기 편한 자리 이름 (예: "D-4 소팀장", "A-0 중팀장", "임원팀 회장").
+  // deptLabel은 "A-0" 같은 중팀장 소속에 "(중팀장)"을 덧붙이는데, 여기서는
+  // 역할 이름을 뒤에 따로 붙이므로 중팀장 자리는 raw department 코드를 그대로 쓴다
+  String get label {
+    if (role == UserRole.executive) return '$department $executiveTitle';
+    if (role == UserRole.midLeader) return '$department ${UserRole.label(role)}';
+    return '${AppTeams.deptLabel(department)} ${UserRole.label(role)}';
+  }
 }
 
 class PositionRegistry {
