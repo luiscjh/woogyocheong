@@ -27,7 +27,7 @@ class _FeeManagementScreenState extends State<FeeManagementScreen> {
     final user = authProvider.currentUser!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('회비 관리')),
+      appBar: AppBar(title: const Text('회비 납부 내역')),
       body: Column(
         children: [
           FeePeriodSelector(

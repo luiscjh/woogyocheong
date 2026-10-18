@@ -87,7 +87,7 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('자리 마이그레이션')),
+      appBar: AppBar(title: const Text('리더 명단 최신화')),
       body: FutureBuilder<List<PositionMigrationEntry>>(
         future: _future,
         builder: (ctx, snap) {

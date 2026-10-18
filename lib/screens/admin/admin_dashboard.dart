@@ -121,14 +121,14 @@ class AdminDashboard extends StatelessWidget {
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.payments_outlined,
-              title: '회비 관리',
+              title: '회비 납부 내역',
               subtitle: user.department == AppTeams.newFamilyTeam
-                  ? '새가족팀 회비 관리'
+                  ? '새가족팀 회비 납부 내역'
                   : auth.isExecutive
-                      ? '전체 회비 관리'
+                      ? '전체 회비 납부 내역'
                       : auth.isMidLeader
                           ? '${user.midTeam}중팀 회비 현황'
-                          : '${user.department}팀 회비 관리',
+                          : '${user.department}팀 회비 납부 내역',
               color: Colors.green,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FeeManagementScreen())),
             ),
@@ -204,7 +204,7 @@ class AdminDashboard extends StatelessWidget {
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.sync_alt_outlined,
-              title: '자리 마이그레이션',
+              title: '리더 명단 최신화',
               subtitle: '기존 회원 데이터를 자리(positions) 모델로 정비 (1회성 도구)',
               color: Colors.teal,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PositionMigrationScreen())),

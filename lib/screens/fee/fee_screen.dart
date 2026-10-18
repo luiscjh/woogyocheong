@@ -7,7 +7,7 @@ import '../../utils/constants.dart';
 import '../../widgets/warning_banner.dart';
 
 // 홈 하단 탭의 '회비' 화면: 역할과 무관하게 본인의 납부 여부만 확인/체크할 수 있음.
-// 팀 전체 회비 현황 관리는 관리 탭의 '회비 관리'(FeeManagementScreen)에서 별도로 제공됨.
+// 팀 전체 회비 현황 관리는 관리 탭의 '회비 납부 내역'(FeeManagementScreen)에서 별도로 제공됨.
 class FeeScreen extends StatefulWidget {
   const FeeScreen({super.key});
 
