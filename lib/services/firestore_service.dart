@@ -88,23 +88,9 @@ class FirestoreService {
   }
 
   // 회원 생성/수정(청년부 명단 화면의 "추가"/"수정") — role·department가 자리
-  // (positions)에 해당하면 _stagePositionChange로 전임자 강등까지 한 배치에서
+  // (positions)에 해당하면 _stagePositionChange로 전임자 강등까지 한 트랜잭션에서
   // 처리한다. previous가 null이면 신규 생성(기존 자리 없음)으로 취급한다.
-  // QA 테스트 계정(testing@church.com)은 자리 북키핑 대상에서 완전히 제외한다
-  // (_TestRoleSwitcherSection과 동일한 취급) — 그러지 않으면 테스트 계정이
-  // 실제 자리 홀더로 집계돼 자리 마이그레이션 화면에 가짜 충돌을 만들고, 자기
-  // 자신이 연기자인 배치에서 본인을 관리자로 되돌리는 쓰기가 positions 규칙의
-  // isAdmin() 평가(배치 커밋 전 상태 기준) 시점엔 아직 비관리자라 거부되는
-  // 문제도 생김
   Future<UserModel> saveMember(UserModel updated, {UserModel? previous, required String performedBy, bool notify = true}) async {
-    if (updated.email == 'testing@church.com') {
-      if (demoMode) {
-        if (previous == null) { _demo.addUser(updated); } else { _demo.updateUser(updated); }
-        return updated;
-      }
-      await _db.collection('users').doc(updated.uid).set(updated.toMap());
-      return updated;
-    }
     final target = previous ??
         UserModel(uid: updated.uid, name: '', email: '', phone: '', role: UserRole.member, department: '', joinDate: updated.joinDate);
     if (demoMode) {
@@ -119,27 +105,29 @@ class FirestoreService {
       if (previous == null) { _demo.addUser(finalUser); } else { _demo.updateUser(finalUser); }
       return finalUser;
     }
-    final batch = _db.batch();
-    final r = await _stagePositionChange(batch, target: target, newRole: updated.role, newDepartment: updated.department, performedBy: performedBy);
-    final finalUser = updated.copyWith(
-      role: r.role,
-      department: r.department,
-      ministryTeam: r.resetMinistry ? '' : null,
-      isMinistryLead: r.resetMinistry ? false : null,
-      bannerAccessGranted: r.resetMinistry ? false : null,
-    );
-    batch.set(_db.collection('users').doc(updated.uid), finalUser.toMap());
-    if (notify && previous != null && previous.department.isNotEmpty &&
-        previous.department != finalUser.department && finalUser.department.isNotEmpty) {
-      batch.set(_db.collection('notifications').doc(), _notificationData(
-        userId: updated.uid,
-        title: '소속팀 변경',
-        body: '소속팀이 ${AppTeams.deptLabel(finalUser.department)}(으)로 변경되었습니다.',
-        type: 'teamAssignment',
-      ));
-    }
-    await batch.commit();
-    return finalUser;
+    late final UserModel finalUser0;
+    await _db.runTransaction((txn) async {
+      final r = await _stagePositionChange(txn, target: target, newRole: updated.role, newDepartment: updated.department, performedBy: performedBy);
+      final finalUser = updated.copyWith(
+        role: r.role,
+        department: r.department,
+        ministryTeam: r.resetMinistry ? '' : null,
+        isMinistryLead: r.resetMinistry ? false : null,
+        bannerAccessGranted: r.resetMinistry ? false : null,
+      );
+      finalUser0 = finalUser;
+      txn.set(_db.collection('users').doc(updated.uid), finalUser.toMap());
+      if (notify && previous != null && previous.department.isNotEmpty &&
+          previous.department != finalUser.department && finalUser.department.isNotEmpty) {
+        txn.set(_db.collection('notifications').doc(), _notificationData(
+          userId: updated.uid,
+          title: '소속팀 변경',
+          body: '소속팀이 ${AppTeams.deptLabel(finalUser.department)}(으)로 변경되었습니다.',
+          type: 'teamAssignment',
+        ));
+      }
+    });
+    return finalUser0;
   }
 
   // ── Positions (자리) ─────────────────────────────────────────────────
@@ -160,18 +148,33 @@ class FirestoreService {
   }
 
   // target의 role/department를 newRole/newDepartment로 바꿀 때 필요한 자리
-  // 갱신(전임자 강등 + positions 문서 갱신)을 주어진 batch에 "쌓기만" 한다
-  // (커밋은 호출자가 한다) — 승인 처리 등 다른 쓰기와 하나의 배치로 묶기 위함.
+  // 갱신(전임자 강등 + positions 문서 갱신)을 주어진 Transaction에 "쌓기만" 한다
+  // (커밋은 호출자의 runTransaction 콜백이 끝나며 자동으로 한다) — 승인 처리 등
+  // 다른 쓰기와 하나의 트랜잭션으로 묶기 위함. WriteBatch가 아니라 Transaction을
+  // 쓰는 이유: 자리 문서를 읽고(get) 그 결과로 홀더 목록을 계산해 다시 쓰는(set)
+  // 패턴이라, 읽기와 쓰기 사이에 다른 관리자의 동시 쓰기가 끼어들면 그 변경을
+  // 덮어써 버릴 수 있다(갱신 유실) — Transaction은 커밋 시점에 읽은 문서가
+  // 그사이 바뀌었으면 자동 재시도하므로 이 경합을 막는다. Firestore 트랜잭션은
+  // "모든 읽기가 모든 쓰기보다 먼저" 규칙이 있어, 아래에서 기존/신규 자리 문서를
+  // 먼저 둘 다 읽은 뒤에만 쓴다.
+  // QA 테스트 계정(testing@church.com)은 자리 북키핑 대상에서 완전히 제외한다 —
+  // 자리 자동 강등/충돌 집계에 실제 데이터처럼 섞이면 안 되므로, 호출자가 누구든
+  // (saveMember, approvePermissionRequest 등) 이 함수 한 곳에서 막는다.
   // 반환값은 target의 users 문서에 최종 반영해야 할 role/department(+ 임원팀
-  // 승격 시 사역팀 필드 초기화 여부)이며, 자리가 바뀌지 않았어도 호출자가
-  // 그대로 사용할 수 있도록 항상 newRole/newDepartment를 담아 돌려준다.
+  // 승격 시 사역팀 필드 초기화 여부)이며, 자리가 바뀌지 않았어도(또는 테스트
+  // 계정이라 자리 자체를 건드리지 않았어도) 호출자가 그대로 쓸 수 있도록 항상
+  // newRole/newDepartment를 담아 돌려준다.
   Future<({String role, String department, bool resetMinistry})> _stagePositionChange(
-    WriteBatch batch, {
+    Transaction txn, {
     required UserModel target,
     required String newRole,
     required String newDepartment,
     required String performedBy,
   }) async {
+    if (target.email == 'testing@church.com') {
+      return (role: newRole, department: newDepartment, resetMinistry: false);
+    }
+
     final oldPositionId = PositionRegistry.idFor(role: target.role, department: target.department);
     final newPositionId = PositionRegistry.idFor(role: newRole, department: newDepartment);
 
@@ -179,13 +182,16 @@ class FirestoreService {
       return (role: newRole, department: newDepartment, resetMinistry: false);
     }
 
+    // 모든 읽기를 먼저 수행(Firestore 트랜잭션 제약: 읽기는 쓰기보다 먼저)
+    final oldSnap = oldPositionId != null ? await txn.get(_db.collection('positions').doc(oldPositionId)) : null;
+    final newSnap = newPositionId != null ? await txn.get(_db.collection('positions').doc(newPositionId)) : null;
+
     // 마이그레이션 전이라면 positions 문서가 아직 없을 수 있어 update() 대신
     // 항상 현재 상태를 읽고 전체 필드를 다시 쓰는 set()을 쓴다(없으면 새로 생성됨)
     if (oldPositionId != null) {
       final oldDef = PositionRegistry.byId(oldPositionId)!;
-      final oldSnap = await _db.collection('positions').doc(oldPositionId).get();
-      final oldHolders = List<String>.from(oldSnap.data()?['holderUids'] ?? []);
-      batch.set(_db.collection('positions').doc(oldPositionId), {
+      final oldHolders = List<String>.from(oldSnap?.data()?['holderUids'] ?? []);
+      txn.set(_db.collection('positions').doc(oldPositionId), {
         'role': oldDef.role,
         'department': oldDef.department,
         'capacity': oldDef.capacity,
@@ -198,14 +204,13 @@ class FirestoreService {
     var resetMinistry = false;
     if (newPositionId != null) {
       final def = PositionRegistry.byId(newPositionId)!;
-      final posSnap = await _db.collection('positions').doc(newPositionId).get();
-      final currentHolders = List<String>.from(posSnap.data()?['holderUids'] ?? []);
+      final currentHolders = List<String>.from(newSnap?.data()?['holderUids'] ?? []);
       // 단일석(capacity==1)에 이미 다른 사람이 있으면 전임자를 팀원으로 강등
       if (def.capacity == 1 && currentHolders.isNotEmpty && currentHolders.first != target.uid) {
-        batch.update(_db.collection('users').doc(currentHolders.first), {'role': UserRole.member, 'permissions': []});
+        txn.update(_db.collection('users').doc(currentHolders.first), {'role': UserRole.member, 'permissions': []});
       }
       final newHolders = def.capacity == 1 ? [target.uid] : {...currentHolders, target.uid}.toList();
-      batch.set(_db.collection('positions').doc(newPositionId), {
+      txn.set(_db.collection('positions').doc(newPositionId), {
         'role': def.role,
         'department': def.department,
         'capacity': def.capacity,
@@ -258,12 +263,17 @@ class FirestoreService {
   // 목록)에 해당하는 사람을 찾는다. Blaze 요금제/서비스 계정 없이 클라이언트에서
   // 그대로 실행 가능하도록 서버 함수 없이 구현. 여러 번 실행해도 안전(멱등) —
   // 항상 "현재 users 상태"를 기준으로 다시 계산한다.
+  // QA 테스트 계정은 자리 북키핑 대상에서 제외(_stagePositionChange와 동일한
+  // 원칙) — 테스트 계정은 역할 전환 섹션(_TestRoleSwitcherSection)에서 updateUser로
+  // 직접 role/department를 바꾸므로 positions를 거치지 않는데, 그 상태에서
+  // 마이그레이션을 돌리면 실제 홀더와 겹치는 가짜 충돌로 집계될 수 있다
   Future<List<PositionMigrationEntry>> previewPositionMigration() async {
     final users = demoMode
         ? _demo.allMembersSnapshot()
         : (await _db.collection('users').get()).docs.map(UserModel.fromFirestore).toList();
+    final realUsers = users.where((u) => u.email != 'testing@church.com').toList();
     return PositionRegistry.all.map((def) {
-      final matched = users.where((u) => PositionRegistry.idFor(role: u.role, department: u.department) == def.id).toList();
+      final matched = realUsers.where((u) => PositionRegistry.idFor(role: u.role, department: u.department) == def.id).toList();
       return PositionMigrationEntry(def: def, matched: matched);
     }).toList();
   }
@@ -445,12 +455,14 @@ class FirestoreService {
   }
 
   // 승인: 신청 종류에 따라 역할/소속팀/사역팀을 반영하고 신청 상태를 approved로 변경.
-  // 관련 문서(users, positions, permissionRequests)를 전부 WriteBatch로 묶어
-  // 원자적으로 처리한다 — 순차적인 update로 나눠서 하면, 뒤쪽 쓰기의 보안 규칙
-  // (isAdmin())이 이미 반영된 앞쪽 쓰기 이후 상태로 평가돼 승인자 본인이
+  // 관련 문서(users, positions, permissionRequests)를 전부 하나의 Transaction으로
+  // 묶어 원자적으로 처리한다 — 순차적인 update로 나눠서 하면, 뒤쪽 쓰기의 보안
+  // 규칙(isAdmin())이 이미 반영된 앞쪽 쓰기 이후 상태로 평가돼 승인자 본인이
   // 요청자이기도 한 경우(예: 테스트 계정으로 역할을 스스로 전환) 거부될 수 있다.
-  // 배치로 묶으면 배치 내 모든 규칙 평가가 커밋 이전(배치 시작 시점) 상태
-  // 기준으로 이뤄지므로 이 경합이 사라진다.
+  // 하나의 Transaction으로 묶으면 모든 규칙 평가가 커밋 이전 상태 기준으로
+  // 이뤄지므로 이 경합이 사라진다(WriteBatch가 아니라 Transaction을 쓰는 이유는
+  // _stagePositionChange 주석 참고 — 자리 문서 읽기/쓰기 사이 동시 수정 경합까지
+  // 막기 위함).
   // executive/midLeader/smallLeader는 "자리"가 있는 종류라 _stagePositionChange로
   // 전임자 강등까지 함께 처리된다. pastor/ministryTeam은 자리 모델 대상이 아니므로
   // (목사님은 transferRole 전용, 사역팀은 역할과 독립된 중복 가능 축) 그대로 둔다.
@@ -485,50 +497,50 @@ class FirestoreService {
       return;
     }
 
-    final batch = _db.batch();
-    UserModel updated;
-    switch (request.requestType) {
-      case PermissionRequestType.pastor:
-        updated = requester.copyWith(role: UserRole.pastor);
-      case PermissionRequestType.executive:
-      case PermissionRequestType.midLeader:
-      case PermissionRequestType.smallLeader:
-        final newRole = _roleForRequestType(request.requestType);
-        final newDept = request.requestType == PermissionRequestType.executive
-            ? AppTeams.executiveTeam
-            : (request.targetDepartment ?? requester.department);
-        final r = await _stagePositionChange(batch, target: requester, newRole: newRole, newDepartment: newDept, performedBy: performedBy);
-        updated = requester.copyWith(
-          role: r.role,
-          department: r.department,
-          ministryTeam: r.resetMinistry ? '' : null,
-          isMinistryLead: r.resetMinistry ? false : null,
-          bannerAccessGranted: r.resetMinistry ? false : null,
-        );
-      case PermissionRequestType.ministryTeam:
-        updated = requester.copyWith(ministryTeam: request.targetMinistryTeam ?? requester.ministryTeam);
-      default:
-        updated = requester;
-    }
+    await _db.runTransaction((txn) async {
+      UserModel updated;
+      switch (request.requestType) {
+        case PermissionRequestType.pastor:
+          updated = requester.copyWith(role: UserRole.pastor);
+        case PermissionRequestType.executive:
+        case PermissionRequestType.midLeader:
+        case PermissionRequestType.smallLeader:
+          final newRole = _roleForRequestType(request.requestType);
+          final newDept = request.requestType == PermissionRequestType.executive
+              ? AppTeams.executiveTeam
+              : (request.targetDepartment ?? requester.department);
+          final r = await _stagePositionChange(txn, target: requester, newRole: newRole, newDepartment: newDept, performedBy: performedBy);
+          updated = requester.copyWith(
+            role: r.role,
+            department: r.department,
+            ministryTeam: r.resetMinistry ? '' : null,
+            isMinistryLead: r.resetMinistry ? false : null,
+            bannerAccessGranted: r.resetMinistry ? false : null,
+          );
+        case PermissionRequestType.ministryTeam:
+          updated = requester.copyWith(ministryTeam: request.targetMinistryTeam ?? requester.ministryTeam);
+        default:
+          updated = requester;
+      }
 
-    batch.set(_db.collection('users').doc(updated.uid), updated.toMap());
-    final oldDept = requester.department;
-    if (oldDept.isNotEmpty && oldDept != updated.department && updated.department.isNotEmpty) {
-      batch.set(_db.collection('notifications').doc(), _notificationData(
+      txn.set(_db.collection('users').doc(updated.uid), updated.toMap());
+      final oldDept = requester.department;
+      if (oldDept.isNotEmpty && oldDept != updated.department && updated.department.isNotEmpty) {
+        txn.set(_db.collection('notifications').doc(), _notificationData(
+          userId: updated.uid,
+          title: '소속팀 변경',
+          body: '소속팀이 ${AppTeams.deptLabel(updated.department)}(으)로 변경되었습니다.',
+          type: 'teamAssignment',
+        ));
+      }
+      txn.update(_db.collection('permissionRequests').doc(request.id), {'status': 'approved'});
+      txn.set(_db.collection('notifications').doc(), _notificationData(
         userId: updated.uid,
-        title: '소속팀 변경',
-        body: '소속팀이 ${AppTeams.deptLabel(updated.department)}(으)로 변경되었습니다.',
-        type: 'teamAssignment',
+        title: '권한 신청 결과',
+        body: '${request.targetLabel} 권한 신청이 승인되었습니다.',
+        type: 'permissionRequest',
       ));
-    }
-    batch.update(_db.collection('permissionRequests').doc(request.id), {'status': 'approved'});
-    batch.set(_db.collection('notifications').doc(), _notificationData(
-      userId: updated.uid,
-      title: '권한 신청 결과',
-      body: '${request.targetLabel} 권한 신청이 승인되었습니다.',
-      type: 'permissionRequest',
-    ));
-    await batch.commit();
+    });
   }
 
   String _roleForRequestType(String type) {

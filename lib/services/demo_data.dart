@@ -315,6 +315,9 @@ class DemoData {
     required String newRole,
     required String newDepartment,
   }) {
+    if (target.email == 'testing@church.com') {
+      return (role: newRole, department: newDepartment, resetMinistry: false);
+    }
     final oldPositionId = PositionRegistry.idFor(role: target.role, department: target.department);
     final newPositionId = PositionRegistry.idFor(role: newRole, department: newDepartment);
     if (oldPositionId == newPositionId) {

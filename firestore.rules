@@ -75,12 +75,18 @@ service cloud.firestore {
       allow read: if isSignedIn();
       // Google 최초 로그인 시 본인 uid로 role=member/department='' 상태로만 스스로
       // 생성 가능. 그 외(CSV 일괄 가져오기, 관리자가 미리 명단 등록 등)는 소팀장
-      // 이상이 대행 생성
-      allow create: if isSmallLeader() ||
+      // 이상이 대행 생성 — 단, 소팀장 이상이 대행 생성할 때도 role은 'member'로만
+      // 제한한다(그러지 않으면 소팀장이 role: 'admin'인 새 문서를 직접 만들어
+      // 권한을 스스로 획득할 수 있음 — update 규칙은 이미 role 변경을 관리자로
+      // 제한하지만 create는 신규 문서라 그 제약을 타지 않았던 구멍, 23차 작업
+      // 보안 점검에서 발견)
+      allow create: if isAdmin() ||
+        (isSmallLeader() && request.resource.data.role == 'member') ||
         (isOwner(uid) && request.resource.data.role == 'member' && request.resource.data.department == '');
       allow update: if
-        // 일반 정보(이름/연락처/소속팀 등) 수정: 소팀장 이상, role은 그대로
-        (isSmallLeader() && request.resource.data.role == resource.data.role) ||
+        // 일반 정보(이름/연락처/소속팀 등) 수정: 소팀장 이상, role·permissions는 그대로
+        (isSmallLeader() && request.resource.data.role == resource.data.role &&
+         request.resource.data.permissions == resource.data.permissions) ||
         // role 변경(승급/강등)은 관리자만 — 역할 양도(transferRole)도 목사님만
         // 가능하므로 여기 isAdmin()으로 이미 커버됨(별도 예외 불필요)
         isAdmin() ||
