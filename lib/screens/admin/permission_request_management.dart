@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/permission_request_model.dart';
 import '../../models/user_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../utils/constants.dart';
 import '../../widgets/confirm_dialog.dart';
 
@@ -256,7 +258,9 @@ class _RequestCard extends StatelessWidget {
       ),
     );
     if (confirm != true || requester == null) return;
-    await service.approvePermissionRequest(request, requester!);
+    if (!context.mounted) return;
+    final performedBy = context.read<AuthProvider>().currentUser!.uid;
+    await service.approvePermissionRequest(request, requester!, performedBy: performedBy);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${request.userName}님에게 ${request.targetLabel} 권한을 부여했습니다.'), backgroundColor: AppColors.success),

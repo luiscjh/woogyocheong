@@ -592,6 +592,7 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     final cohort = cohortText.isEmpty ? null : int.tryParse(cohortText);
 
     try {
+      final performedBy = context.read<AuthProvider>().currentUser!.uid;
       if (isEditing) {
         final updated = widget.member!.copyWith(
           name: _nameCtrl.text.trim(),
@@ -605,12 +606,16 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           birthDate: _birthDate,
           cohort: cohort,
         );
-        await widget.service.updateUser(updated, previousDepartment: widget.member!.department);
+        // role/department가 자리(positions)에 해당하면 saveMember가 전임자
+        // 강등까지 함께 처리한다(예: A-1 소팀장을 다른 사람으로 바꾸면 기존
+        // 소팀장은 자동으로 팀원이 됨) — 실제 저장된 최종 값(임원팀 승격 시
+        // 사역팀 필드 초기화 등)을 돌려받아 그대로 세션 캐시에 반영한다
+        final saved = await widget.service.saveMember(updated, previous: widget.member!, performedBy: performedBy);
         // 본인 계정을 수정한 경우, 방금 저장한 값이 현재 세션의 AuthProvider
         // 캐시에도 즉시 반영되도록 함 (그렇지 않으면 재로그인 전까지 배너 관리
         // 권한 공유 등 변경 사항이 화면에 반영되지 않음)
-        if (mounted && context.read<AuthProvider>().currentUser?.uid == updated.uid) {
-          context.read<AuthProvider>().setCurrentUser(updated);
+        if (mounted && context.read<AuthProvider>().currentUser?.uid == saved.uid) {
+          context.read<AuthProvider>().setCurrentUser(saved);
         }
       } else {
         final user = UserModel(
@@ -627,7 +632,9 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           birthDate: _birthDate,
           cohort: cohort,
         );
-        await widget.service.importMembers([user]);
+        // 신규 추가도 role이 바로 자리(소팀장 등)로 지정될 수 있으므로 동일한
+        // 경로(saveMember, previous: null)로 전임자 강등 여부까지 처리한다
+        await widget.service.saveMember(user, performedBy: performedBy);
       }
       if (mounted) Navigator.pop(context);
     } finally {
