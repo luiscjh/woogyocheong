@@ -1193,6 +1193,9 @@
         "전체 반영" 버튼을 누르지 않은 상태(사용자 승인 대기, rules
         배포까지만 완료). 실행해도 안전(멱등)하지만 실데이터 쓰기라
         사용자 확인 후 진행할 것
+  [ ] 안드로이드 태블릿(갤럭시 탭 S9 Ultra) 재연결 후 24차 작업(임원팀
+        직책 세분화)이 반영된 최신 빌드 설치 검증 — 이번 세션엔 태블릿이
+        USB로 연결돼 있지 않아 생략
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [14차 작업] 2026-09-26
@@ -1825,5 +1828,113 @@
     시뮬레이터 재기동 반영
   - Reality Checker와 AI-Generated Code Security Auditor를 병렬로 실행해
     구현 전체를 교차 검증(서로 의존하지 않는 독립 검사라 순차 대신 병렬)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[24차 작업] 2026-10-18
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 임원팀 역할을 회장/부회장/총무/회계 4개 직책으로 세분화
+  - 배경: "임원팀은 회장, 부회장, 총무, 회계로 세부화 가능하다. 총무를
+    제외한 임원팀 내 모든 역할은 1명만 존재할 수 있고 총무 역할은 1명
+    또는 그 이상 배정이 가능하다"는 요청. 23차 작업의 자리(positions)
+    모델이 임원팀을 단일 자리로만 다루고 있어, 직책별 단일/다인석 구분을
+    새로 반영해야 했음
+  - 설계 확정 전 사용자 확인을 받은 세 가지 결정:
+    1) 직책 저장 방식 — UserModel에 별도 executiveTitle 필드 추가
+       (role 값 자체를 늘리는 대신)
+    2) 모든 임원은 직책 필수 — "직책 없는 일반 임원" 상태를 허용하지
+       않음(역할이 executive가 아니게 되면 executiveTitle은 항상 ''으로
+       비움)
+    3) 직책 선택 시점 — 관리자 승인 시가 아니라, 권한 신청 시점에
+       신청자가 직접 직책을 선택
+  - lib/utils/constants.dart: ExecutiveTitle 클래스 신규(회장/부회장/
+    총무/회계 4개 상수, capacityFor(title)가 총무만 null(다인석) 그 외는
+    1을 반환)
+  - lib/models/position_model.dart: PositionDef/PositionAssignment에
+    executiveTitle 필드 추가. PositionRegistry가 임원팀을 자리 1개가
+    아니라 직책별 자리 4개(임원팀_회장/부회장/총무/회계)로 정적 생성하도록
+    변경 — 전체 자리 수 23 → 26
+  - lib/models/user_model.dart: executiveTitle 필드 추가(기본값 '').
+    lib/models/permission_request_model.dart: targetExecutiveTitle
+    필드 추가, targetLabel이 "임원팀 (회장)"처럼 직책을 함께 표시
+  - lib/services/firestore_service.dart:
+    · _stagePositionChange가 newExecutiveTitle 파라미터를 받아 역할이
+      executive가 아니면 무조건 ''으로 정리. 테스트 계정 제외 체크를
+      이 함수 맨 앞으로 옮겨(기존엔 saveMember에만 있었음)
+      approvePermissionRequest 등 모든 호출자가 자동으로 보호받도록
+      중앙화 — Reality Checker 지적 사항(23차 작업 검증 단계에서 발견,
+      아래 참고)
+    · applyPositionAssignments: 강등 시 executiveTitle도 함께 비우고,
+      승급 시 직책을 함께 반영
+    · previewPositionMigration: 매칭 시 executiveTitle까지 비교해
+      정확한 자리에 매칭
+    · approvePermissionRequest: targetExecutiveTitle을 _stagePositionChange에
+      전달
+  - lib/services/demo_data.dart: 데모 모드용 동일 로직 반영(이임원=회장,
+    박임원=총무로 시드 데이터 조정)
+  - lib/screens/admin/member_management.dart: 역할이 임원팀일 때만
+    보이는 "임원팀 직책 *" 드롭다운 추가. canEditExecutiveTitle =
+    auth.isAdmin — 기존 canEditMinistryLead(사역팀 리더 지정)와 동일한
+    "관리자만 변경, 그 외는 읽기 전용 + 안내 문구" 패턴을 그대로 재사용
+  - lib/screens/profile/profile_screen.dart: 권한 신청 다이얼로그에서
+    임원팀을 선택하면 직책 선택 드롭다운이 추가로 나타남(필수). QA
+    역할 전환 목록의 "임원팀" 항목 1개를 "임원팀 회장/부회장/총무/회계"
+    4개로 교체(총 13종)
+  - lib/screens/admin/position_migration_screen.dart: 자리 라벨 표시를
+    임원팀은 "임원팀 {직책}" 형태로 보여주는 헬퍼 추가
+  - Reality Checker 지적 사항 반영(23차 작업 병렬 검증 결과, 이번
+    작업에서 함께 처리):
+    1) approvePermissionRequest에 테스트 계정 제외 처리가 없어 자리
+       마이그레이션 화면에 가짜 충돌을 만들 수 있었음 — 제외 체크를
+       _stagePositionChange 안으로 중앙화해 해결(saveMember/
+       approvePermissionRequest 공통 적용)
+    2) WriteBatch는 커밋 시점에 재검증이 없어 두 관리자가 동시에 같은
+       자리를 수정하면 경합 상태(TOCTOU)가 생길 수 있음 — saveMember/
+       _stagePositionChange/approvePermissionRequest를
+       _db.runTransaction으로 전환(Firestore 트랜잭션 제약상 읽기를
+       전부 먼저 수행하도록 순서 재정리)
+  - AI-Generated Code Security Auditor 지적 사항 반영(23차 작업 병렬
+    검증 결과):
+    - CRITICAL: users 컬렉션 create 규칙이 role 필드를 전혀 검사하지
+      않아, 소팀장이 SDK로 직접 role:'admin' 문서를 만들면 앱 UI를
+      거치지 않고 관리자가 될 수 있었음(positions 모델은 admin 역할을
+      다루지 않아 이 경로를 막지 못함). create 규칙을 admin이거나,
+      소팀장이 role:'member'로 만들거나, 본인이 role:'member'·
+      department:''로 만드는 경우만 허용하도록 수정
+    - LOW: 소팀장 이상의 users 수정 경로에서 permissions 필드가
+      그대로 유지되는지 검사하지 않음(현재 미사용 필드라 즉시 악용은
+      안 되지만 위험한 선례) — request.resource.data.permissions ==
+      resource.data.permissions 조건 추가
+    - 사용자 승인("즉시 배포") 받아 firestore:rules 즉시 프로덕션 배포,
+      에뮬레이터 create-rule.mjs 테스트 3건 통과 확인 후 배포
+  - 검증:
+    1) Firestore 에뮬레이터 executive-title.mjs — 회장(단일석) 교체 시
+      전임자 강등/신임자 승급, 총무(다인석) 추가 시 강등 없음 — 7건 전부
+      통과
+    2) 실제 프로덕션(conference-c9c99)에서 testing@church.com 계정으로
+      라이브 검증 전 과정:
+      - QA 역할 전환으로 테스트 계정을 "임원팀 회장"으로 전환 → 홈/
+        관리 메뉴 모두 임원팀 범위로 정상 축소, 청년부 명단에 "임원팀
+        (회장)"으로 정상 표시됨을 확인
+      - 비관리자(임원팀) 상태에서 본인 회원 수정 화면을 열어보니 "임원팀
+        직책" 드롭다운이 비활성 + 안내 문구로 정상 잠겨 있음을 확인
+      - 테스트 계정을 팀원으로 낮춘 뒤 권한 신청 다이얼로그에서 "임원팀"
+        + 직책 "총무" 선택 → 신청, "임원팀 (총무) 권한 신청 승인
+        대기중"으로 정상 표시
+      - 관리자로 전환해 권한 신청 관리에서 승인 → 청년부 명단에 "임원팀
+        (총무)"로 정상 반영됨을 확인(approvePermissionRequest의
+        targetExecutiveTitle 처리 end-to-end 검증)
+      - 관리자 권한으로 "임원팀 직책"을 회계로 직접 변경·저장해 정상
+        반영됨을 확인. 단, 같은 테스트 계정이 신청자이자 승인자 역할을
+        모두 수행하는 특수성 때문에(실사용에서는 서로 다른 계정),
+        승인 직후 세션의 isAdmin 캐시가 즉시 갱신되지 않아 관리자 전용
+        잠금이 일시적으로 느슨해 보이는 타이밍이 관찰됨 — 서로 다른
+        계정이 요청/승인을 나눠 맡는 실사용 경로에서는 재현되지 않는
+        테스트 전용 현상으로 판단, 코드 수정 없이 기록만 남김
+      - 검증 종료 후 테스트 계정을 관리자/A-1로 원복
+    3) flutter analyze 통과 확인(기존 share_plus deprecated info 2건
+      외 없음), flutter build web --release / iOS 시뮬레이터 재기동
+      모두 성공. 안드로이드 태블릿은 이번 세션엔 USB로 연결돼 있지
+      않아 APK 설치 검증은 생략(다음 세션으로 이월)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
