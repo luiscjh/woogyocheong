@@ -1184,6 +1184,15 @@
           검사하지 않음
         - 회원 탈퇴 시 출석/회비/심방/권한 신청/알림 기록은 남음(방침 고지,
           보호책임자가 콘솔에서 수동 삭제)
+  [ ] 2단계: 기수별 인사 발령표 + 일괄 적용(되돌리기 포함) — positions
+        모델(23차 작업)을 기반으로, 여러 자리를 한 번에 발령하는 화면과
+        되돌리기 기능. applyPositionAssignments가 이미 여러 PositionAssignment를
+        한 배치로 처리하도록 범용으로 만들어져 있어 재사용 가능
+  [ ] 실데이터 자리 마이그레이션 미실행 — 23차 작업에서 만든 "자리
+        마이그레이션" 화면(관리 메뉴)은 아직 실제 프로덕션 데이터에
+        "전체 반영" 버튼을 누르지 않은 상태(사용자 승인 대기, rules
+        배포까지만 완료). 실행해도 안전(멱등)하지만 실데이터 쓰기라
+        사용자 확인 후 진행할 것
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [14차 작업] 2026-09-26
@@ -1708,5 +1717,113 @@
     화면)도 동일하게 '청년부 명단'으로 맞춤
   - flutter analyze 통과 확인, 웹 재빌드 후 Firebase Hosting 재배포, iOS
     시뮬레이터 재기동
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[23차 작업] 2026-10-18
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ "권한 이동 자동화" 1단계 — 자리(positions) 모델 도입
+  - 배경: "권한을 사람이 아니라 '자리'에 붙여서, 권한 이동을 holder 교체
+    한 번으로 끝나게 만든다"는 요청. 실제 버그도 확인됨 —
+    approvePermissionRequest가 신청자만 승급시키고 기존 자리 주인은
+    강등하지 않아, 같은 소팀에 소팀장이 2명 생길 수 있는 상태였음
+  - 설계 확정 전 사용자 확인을 받은 핵심 결정 두 가지:
+    1) 소팀장은 소팀마다 1명이 원칙이지만, 새가족팀 "리더"(role=소팀장,
+       department=새가족팀)는 예외적으로 다인(多人) — 이미 장리더/윤리더
+       둘이 주차를 나눠 맡는 기존 구조가 있고(new_family_rotation_
+       management.dart가 이 role+department 조합에서 여러 명을 후보로
+       기대함), 새가족팀 "팀장"(mid_leader)은 그대로 1명
+    2) positions 문서 필드는 처음 제안한 단수 holderUid 대신
+       holderUids(리스트) + capacity(1=단일석/null=다인석)로 통일 —
+       단일/다인 자리를 하나의 holder-교체 함수로 같이 처리하기 위함
+  - lib/models/position_model.dart 신규: PositionRegistry가
+    AppTeams.allDepts를 순회해 23개 자리(중팀장 4 + 일반 소팀장 16 +
+    새가족팀장 1 + 새가족팀리더 1 + 임원팀 1)를 정적으로 정의
+    (PositionRegistry.idFor(role, department)로 자리 ID 역산 가능).
+    PositionModel(Firestore 문서 표현), PositionAssignment(자리 하나의
+    최종 holder 목록을 지정하는 배치 입력 단위, 2단계 일괄 발령에서도
+    재사용할 설계)
+  - lib/services/firestore_service.dart:
+    · _stagePositionChange(private): target의 role/department 변경에
+      필요한 자리 갱신(전임자 강등 + positions 문서 갱신)을 호출자가
+      넘긴 WriteBatch에 "쌓기만" 함 — 다른 쓰기와 하나의 배치로 묶기
+      위함. 자리 문서가 아직 없을 수 있어(마이그레이션 전) update()
+      대신 항상 현재 상태를 읽고 set()으로 전체 필드를 다시 씀
+    · saveMember: 청년부 명단 "추가"/"수정" 저장을 이 경로로 통일
+      (기존 updateUser/importMembers 대체)
+    · applyPositionAssignments: 여러 자리를 previousHolderUids/
+      holderUids 비교로 한 배치에 갱신(마이그레이션 충돌 해결, 2단계
+      일괄 발령에서 재사용)
+    · previewPositionMigration: 현재 users를 스캔해 자리별 매칭/충돌
+      미리보기
+    · approvePermissionRequest: executive/midLeader/smallLeader 신청
+      승인을 _stagePositionChange 경로로 바꿔 전임자 강등까지 포함,
+      기존 원자성(배치 하나로 users+positions+permissionRequests+알림
+      전부 처리)은 그대로 유지. performedBy(승인자 uid) 파라미터 추가.
+      pastor/ministryTeam 신청은 자리 모델 대상이 아니라(목사님은
+      transferRole 전용, 사역팀은 역할과 독립된 중복 가능 축) 그대로 둠
+  - lib/services/demo_data.dart에 동일 로직의 인메모리 버전 구현(기존
+    _users 목록을 스캔해 초기 positions를 자동 유도하므로 데모 계정이
+    바뀌어도 수동으로 맞출 필요 없음 — 우교청_데모계정.txt는 계정
+    자체가 바뀐 게 아니라 변경 없음)
+  - lib/screens/admin/member_management.dart: _MemberFormDialog 저장을
+    saveMember 호출로 변경(추가/수정 모두)
+  - lib/screens/admin/permission_request_management.dart: 승인 호출에
+    performedBy(현재 로그인한 관리자 uid) 전달 추가
+  - lib/screens/admin/position_migration_screen.dart 신규: 관리자 전용
+    1회성 정비 화면. Blaze 요금제/서비스 계정 없이 클라이언트에서 직접
+    실행. 전체 users를 스캔해 23개 자리 각각의 매칭 후보를 보여주고,
+    단일석인데 후보가 2명 이상이면 "충돌"로 목록을 보여준 뒤 관리자가
+    1명을 직접 선택(applyPositionAssignments 호출, 선택되지 않은
+    사람은 자동으로 팀원 강등). 충돌 없는 자리는 "전체 반영" 버튼으로
+    일괄 반영. 여러 번 실행해도 안전(멱등) — 항상 현재 users 상태를
+    다시 스캔함. admin_dashboard.dart 관리 메뉴에 "자리 마이그레이션"
+    카드 추가(관리자 전용)
+  - firestore.rules: positions/{id} 쓰기는 isAdmin()만, capacity 불변식
+    (capacity==null이거나 holderUids.size()<=capacity)을 검사하는
+    positionCapacityOk() 추가. "users 갱신과 positions 갱신이 같은
+    배치에서 일관되는지 getAfter로 교차 검증" 여부는 검토했으나, 관리자는
+    이미 users 전체에 대한 쓰기 권한이 있어 추가 공격 표면이 없다고
+    판단해 생략(규칙 주석에 기록). firebase.json에 규칙 검증용 Firestore
+    에뮬레이터 포트(8080) 추가
+  - 검증:
+    1) Firestore 에뮬레이터(규칙만 배포)로 rules-unit-test 7건 — 관리자
+       단일석 1명 쓰기 허용, 2명 쓰기 거부, 다인석 여러 명 허용, 비관리자
+       쓰기 전부 거부, 읽기는 로그인 사용자 누구나 허용, 전임자 role
+       강등 쓰기 허용 — 전부 통과
+    2) 같은 에뮬레이터에서 _stagePositionChange가 실제로 만드는 배치
+       쓰기 시퀀스를 그대로 재현하는 시나리오 테스트 — "A-1 소팀장
+       자리에 이미 정소팀이 있는데 한소팀을 승급시키면 정소팀이 자동으로
+       팀원이 되는지" — 배치 커밋 허용, 자리 holderUids 교체, 전임자
+       강등, 신임자 승급까지 전부 기대대로 확인(4건 전부 통과)
+    3) 기능 검증을 위해 사용자 승인을 받아 firestore:rules 배포 후,
+       실제 프로덕션(conference-c9c99)에서 testing@church.com 계정으로
+       라이브 검증: 청년부 명단 편집으로 테스트 계정을 소팀장/A-1로
+       승급(성공, 관리 메뉴가 A-1팀 범위로 정상 축소됨) → 다시
+       관리자/A-1로 되돌리는 시도에서 실제 버그 발견·수정(아래 참고) →
+       재시도 성공. 자리 마이그레이션 화면에서 프로덕션 데이터가
+       최재현(D-4 소팀장) 1건만 충돌 없이 남고 테스트 계정 오염이 없는
+       깨끗한 상태임을 확인. 실데이터 중 bunchiko@gmail.com(최재현)
+       계정은 건드리지 않음(사용자 지시대로) — 따라서 "다른 사람을
+       실제로 강등"하는 시나리오는 위 2)의 에뮬레이터 테스트로 대체
+       검증함
+  - 버그 발견 및 수정(라이브 테스트 중): 테스트 계정이 소팀장에서
+    관리자로 스스로 되돌아가는 저장이 권한 오류로 실패함. 원인 추적 —
+    같은 배치 안에서 (a) positions 문서 쓰기(isAdmin() 요구)와 (b) 본인
+    role을 admin으로 바꾸는 쓰기가 함께 일어나는데, Firestore 규칙은
+    배치 내 모든 쓰기를 "배치 커밋 이전" 상태 기준으로 평가하므로, 연기자
+    (테스트 계정 자신)가 그 시점엔 아직 소팀장(비관리자)이라 (a)가
+    거부됨. 일반 관리자가 다른 사람을 자리에 배정하는 정상 경로에서는
+    연기자(관리자)의 role이 배치 중 바뀌지 않아 재현되지 않고, 오직
+    "자기 자신을 승급/강등시키면서 positions도 같이 건드리는" 테스트
+    계정 특유의 경로에서만 발생. 해결: saveMember에서 테스트 계정
+    (testing@church.com)을 자리 북키핑 대상에서 아예 제외(QA 역할
+    전환 섹션과 동일한 취급) — 자리 마이그레이션 화면에 가짜 충돌을
+    만드는 것도 함께 방지됨
+  - flutter analyze 통과 확인(기존 share_plus deprecated info 2건 외
+    없음), flutter build apk --debug / web --release 모두 성공, iOS
+    시뮬레이터 재기동 반영
+  - Reality Checker와 AI-Generated Code Security Auditor를 병렬로 실행해
+    구현 전체를 교차 검증(서로 의존하지 않는 독립 검사라 순차 대신 병렬)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
