@@ -28,6 +28,14 @@ rules_version = '2';
 //   검사)은 여기서 강제하지 않았다. 지금은 소팀장 이상이면 누구나 출석/회비/명단을
 //   수정할 수 있다 — 다른 팀 기록까지 건드릴 수 있다는 뜻이므로, 추후 부서 일치
 //   검사를 추가하는 것을 권장한다.
+// - positions(자리): 권한을 사람이 아니라 "자리"(예: A-1 소팀장)에 붙여, holder
+//   교체 한 번으로 전임자 강등까지 끝나도록 한 모델(23차 작업). 자리 문서 자체는
+//   관리자만 쓸 수 있고 capacity(단일석=1/다인석=null) 불변식만 검사한다. "자리가
+//   바뀌면 users.role/department도 같은 배치에서 일치해야 한다"는 더 강한 교차
+//   검증(getAfter 활용)은 검토했으나, 관리자는 이미 users 전체에 대한 쓰기 권한이
+//   있어(isAdmin()) positions 쪽만 따로 더 막아도 공격 표면이 줄지 않아 생략했다 —
+//   원자성(같은 WriteBatch로 묶기)은 서버 규칙이 아니라 FirestoreService 쪽
+//   책임으로 유지한다.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -89,6 +97,18 @@ service cloud.firestore {
       allow delete: if isAdmin() ||
         (isSmallLeader() && !(resource.data.role in ['admin', 'pastor', 'executive', 'mid_leader'])) ||
         isOwner(uid);
+    }
+
+    // ── positions (자리: 소팀장/중팀장/임원팀) ──────────────────────────
+    // capacity==1(단일석)이면 holderUids는 0~1명만 허용. capacity==null(다인석,
+    // 임원팀·새가족팀 리더)은 인원 제한을 두지 않는다
+    function positionCapacityOk() {
+      return request.resource.data.capacity == null ||
+        request.resource.data.holderUids.size() <= request.resource.data.capacity;
+    }
+    match /positions/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && positionCapacityOk();
     }
 
     // ── attendance / fees: 본인 기록은 스스로 기록, 그 외는 소팀장 이상 ──
