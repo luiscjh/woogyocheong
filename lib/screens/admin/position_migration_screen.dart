@@ -43,6 +43,7 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
                 role: e.def.role,
                 department: e.def.department,
                 capacity: e.def.capacity,
+                executiveTitle: e.def.executiveTitle,
                 previousHolderUids: e.matched.map((u) => u.uid).toList(),
                 holderUids: e.matched.map((u) => u.uid).toList(),
               ))
@@ -68,6 +69,7 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
           role: entry.def.role,
           department: entry.def.department,
           capacity: entry.def.capacity,
+          executiveTitle: entry.def.executiveTitle,
           previousHolderUids: entry.matched.map((u) => u.uid).toList(),
           holderUids: [winnerUid],
         ),
@@ -223,6 +225,7 @@ class _ConflictCard extends StatelessWidget {
 }
 
 String _positionLabel(PositionDef def) {
+  if (def.role == UserRole.executive) return '${def.department} ${def.executiveTitle}';
   final roleLabel = UserRole.label(def.role);
   return '${AppTeams.deptLabel(def.department)} $roleLabel';
 }

@@ -476,7 +476,8 @@ class _MemberTile extends StatelessWidget {
           ],
         ),
         subtitle: Text(
-          '${newFamilyWeek != null ? '새가족 $newFamilyWeek주차' : AppTeams.deptLabel(member.department)} · '
+          '${newFamilyWeek != null ? '새가족 $newFamilyWeek주차' : AppTeams.deptLabel(member.department)}'
+          '${member.role == UserRole.executive && member.executiveTitle.isNotEmpty ? ' (${member.executiveTitle})' : ''} · '
           '${member.cohort != null ? '${member.cohort}기' : '기수 미등록'}',
         ),
         trailing: readOnly
@@ -530,6 +531,7 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
   late final TextEditingController _phoneCtrl;
   late String _dept;
   late String _role;
+  late String _executiveTitle;
   late String _ministryTeam;
   late bool _isMinistryLead;
   late bool _bannerAccessGranted;
@@ -549,6 +551,7 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     // allDepts에 없는 값이면 기본값으로 fallback
     if (!AppTeams.allDepts.contains(_dept)) _dept = AppTeams.smallTeams.first;
     _role = widget.member?.role ?? UserRole.member;
+    _executiveTitle = widget.member?.executiveTitle ?? '';
     _ministryTeam = widget.member?.ministryTeam ?? '';
     _isMinistryLead = widget.member?.isMinistryLead ?? false;
     _bannerAccessGranted = widget.member?.bannerAccessGranted ?? false;
@@ -580,6 +583,8 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
+    // 임원팀이 아니면 직책도 의미가 없으므로 방어적으로 초기화
+    final effectiveExecutiveTitle = _role == UserRole.executive ? _executiveTitle : '';
     // 임원팀 역할은 사역팀에 소속될 수 없으므로 방어적으로 초기화
     final canJoinMinistry = AppTeams.canJoinMinistryTeam(_role);
     final effectiveMinistryTeam = canJoinMinistry ? _ministryTeam : '';
@@ -600,6 +605,7 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           phone: _phoneCtrl.text.trim(),
           department: _dept,
           role: _role,
+          executiveTitle: effectiveExecutiveTitle,
           ministryTeam: effectiveMinistryTeam,
           isMinistryLead: effectiveIsMinistryLead,
           bannerAccessGranted: effectiveBannerAccessGranted,
@@ -626,6 +632,7 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
           role: _role,
           department: _dept,
           joinDate: DateTime.now(),
+          executiveTitle: effectiveExecutiveTitle,
           ministryTeam: effectiveMinistryTeam,
           isMinistryLead: effectiveIsMinistryLead,
           bannerAccessGranted: effectiveBannerAccessGranted,
@@ -647,6 +654,8 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     final auth = context.watch<AuthProvider>();
     // 사역팀장 지정(콘텐츠팀 등 사역팀의 고유 권한 보유자 지정)은 관리자만 가능
     final canEditMinistryLead = auth.isAdmin;
+    // 임원팀 직책(회장/부회장/총무/회계) 지정도 사역팀장 지정과 동일하게 관리자만 가능
+    final canEditExecutiveTitle = auth.isAdmin;
     // 배너 관리 권한 공유(위임)는 관리자 또는 해당 사역팀 팀장만 가능
     final canShareBannerAccess = auth.canShareBannerAccess;
     final canJoinMinistry = AppTeams.canJoinMinistryTeam(_role);
@@ -721,8 +730,23 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
                     _ministryTeam = '';
                     _isMinistryLead = false;
                   }
+                  // 임원팀이 아니게 되면 직책도 의미가 없으므로 초기화
+                  if (_role != UserRole.executive) _executiveTitle = '';
                 }),
               ),
+              if (_role == UserRole.executive) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: ExecutiveTitle.all.contains(_executiveTitle) ? _executiveTitle : null,
+                  decoration: InputDecoration(
+                    labelText: '임원팀 직책 *',
+                    helperText: canEditExecutiveTitle ? null : '임원팀 직책 지정은 관리자만 변경할 수 있습니다.',
+                  ),
+                  items: ExecutiveTitle.all.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                  onChanged: canEditExecutiveTitle ? (v) => setState(() => _executiveTitle = v ?? '') : null,
+                  validator: (v) => (v == null || v.isEmpty) ? '임원팀 직책을 선택해 주세요.' : null,
+                ),
+              ],
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: canJoinMinistry ? _ministryTeam : '',

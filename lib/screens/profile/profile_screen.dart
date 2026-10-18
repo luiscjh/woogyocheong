@@ -460,6 +460,7 @@ class _PermissionRequestSection extends StatelessWidget {
       requestType: result.type,
       targetDepartment: result.targetDepartment,
       targetMinistryTeam: result.targetMinistryTeam,
+      targetExecutiveTitle: result.targetExecutiveTitle,
     ));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -473,8 +474,9 @@ class _PermissionRequestChoice {
   final String type;
   final String? targetDepartment;
   final String? targetMinistryTeam;
+  final String? targetExecutiveTitle;
 
-  const _PermissionRequestChoice(this.type, {this.targetDepartment, this.targetMinistryTeam});
+  const _PermissionRequestChoice(this.type, {this.targetDepartment, this.targetMinistryTeam, this.targetExecutiveTitle});
 }
 
 // 신청 종류를 고르고, 중팀장/소팀장/사역팀처럼 세부 대상이 필요한 경우
@@ -497,6 +499,8 @@ class _PermissionRequestDialogState extends State<_PermissionRequestDialog> {
         return AppTeams.midTeams.map((m) => '$m-0').toList();
       case PermissionRequestType.smallLeader:
         return AppTeams.smallTeams;
+      case PermissionRequestType.executive:
+        return ExecutiveTitle.all;
       case PermissionRequestType.ministryTeam:
         return AppTeams.ministryTeams;
       default:
@@ -532,7 +536,13 @@ class _PermissionRequestDialogState extends State<_PermissionRequestDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _target,
-              decoration: InputDecoration(labelText: _type == PermissionRequestType.ministryTeam ? '사역팀' : '소속팀'),
+              decoration: InputDecoration(
+                labelText: _type == PermissionRequestType.ministryTeam
+                    ? '사역팀'
+                    : _type == PermissionRequestType.executive
+                        ? '직책'
+                        : '소속팀',
+              ),
               items: options
                   .map((t) => DropdownMenuItem(value: t, child: Text(AppTeams.deptLabel(t))))
                   .toList(),
@@ -554,6 +564,7 @@ class _PermissionRequestDialogState extends State<_PermissionRequestDialog> {
                       targetDepartment:
                           _type == PermissionRequestType.midLeader || _type == PermissionRequestType.smallLeader ? _target : null,
                       targetMinistryTeam: _type == PermissionRequestType.ministryTeam ? _target : null,
+                      targetExecutiveTitle: _type == PermissionRequestType.executive ? _target : null,
                     ),
                   ),
           child: const Text('신청'),
@@ -574,20 +585,31 @@ class _RoleOption {
   // 사역팀(콘텐츠팀 등) 소속 여부 — department와 독립된 별도 축이므로 함께 관리
   final String ministryTeam;
   final bool isMinistryLead;
+  // role=executive일 때만 의미 있음(회장/부회장/총무/회계)
+  final String executiveTitle;
 
-  const _RoleOption(this.label, this.role, this.department, {this.ministryTeam = '', this.isMinistryLead = false});
+  const _RoleOption(this.label, this.role, this.department,
+      {this.ministryTeam = '', this.isMinistryLead = false, this.executiveTitle = ''});
 
-  String get key => '$role|$department|$ministryTeam|$isMinistryLead';
+  String get key => '$role|$department|$ministryTeam|$isMinistryLead|$executiveTitle';
 
   bool matches(UserModel u) =>
-      role == u.role && department == u.department && ministryTeam == u.ministryTeam && isMinistryLead == u.isMinistryLead;
+      role == u.role &&
+      department == u.department &&
+      ministryTeam == u.ministryTeam &&
+      isMinistryLead == u.isMinistryLead &&
+      executiveTitle == u.executiveTitle;
 }
 
 const _testRoleOptions = [
   _RoleOption('팀원', UserRole.member, 'A-1'),
   _RoleOption('소팀장', UserRole.smallLeader, 'A-1'),
   _RoleOption('중팀장', UserRole.midLeader, 'A-0'),
-  _RoleOption('임원팀', UserRole.executive, AppTeams.executiveTeam),
+  // 임원팀은 모두 직책 필수 — QA에서 단일석/다인석을 모두 확인할 수 있도록 4개 모두 제공
+  _RoleOption('임원팀 회장', UserRole.executive, AppTeams.executiveTeam, executiveTitle: ExecutiveTitle.president),
+  _RoleOption('임원팀 부회장', UserRole.executive, AppTeams.executiveTeam, executiveTitle: ExecutiveTitle.vicePresident),
+  _RoleOption('임원팀 총무', UserRole.executive, AppTeams.executiveTeam, executiveTitle: ExecutiveTitle.secretary),
+  _RoleOption('임원팀 회계', UserRole.executive, AppTeams.executiveTeam, executiveTitle: ExecutiveTitle.treasurer),
   _RoleOption('목사님', UserRole.pastor, 'A-1'),
   _RoleOption('관리자', UserRole.admin, 'A-1'),
   _RoleOption('새가족', UserRole.member, AppTeams.newFamilyTeam),
@@ -667,6 +689,7 @@ class _TestRoleSwitcherSection extends StatelessWidget {
       department: option.department,
       ministryTeam: option.ministryTeam,
       isMinistryLead: option.isMinistryLead,
+      executiveTitle: option.executiveTitle,
       // 콘텐츠팀 팀원 상태를 벗어나면 위임받았던 배너 관리 권한도 함께 초기화
       bannerAccessGranted:
           option.ministryTeam == AppTeams.contentTeam && !option.isMinistryLead ? latest.bannerAccessGranted : false,
