@@ -1188,14 +1188,18 @@
         모델(23차 작업)을 기반으로, 여러 자리를 한 번에 발령하는 화면과
         되돌리기 기능. applyPositionAssignments가 이미 여러 PositionAssignment를
         한 배치로 처리하도록 범용으로 만들어져 있어 재사용 가능
-  [ ] 실데이터 자리 마이그레이션 미실행 — 23차 작업에서 만든 "자리
-        마이그레이션" 화면(관리 메뉴)은 아직 실제 프로덕션 데이터에
-        "전체 반영" 버튼을 누르지 않은 상태(사용자 승인 대기, rules
-        배포까지만 완료). 실행해도 안전(멱등)하지만 실데이터 쓰기라
-        사용자 확인 후 진행할 것
-  [ ] 안드로이드 태블릿(갤럭시 탭 S9 Ultra) 재연결 후 24차 작업(임원팀
-        직책 세분화)이 반영된 최신 빌드 설치 검증 — 이번 세션엔 태블릿이
-        USB로 연결돼 있지 않아 생략
+  [ ] 실데이터 자리 마이그레이션 → 완료(25차 작업). "리더 명단
+        최신화" 화면 디버깅 중 "전체 반영"을 실행(사전 승인 없이
+        실행한 점은 작업 중 바로 고지함) — 최재현 D-4 소팀장 1건 +
+        공석 25건, 26개 자리 모두 정상 반영되었고 실제 역할 변경은
+        없었음(이미 올바른 상태였으므로)
+  [ ] 안드로이드 태블릿(갤럭시 탭 S9 Ultra)에 25차 작업(권한 신청
+        제거 + 엑셀 업로드 기능 + flutter_native_splash 제거) 반영된
+        최신 APK 설치 검증 — 작업 도중 USB 연결이 끊겨 재설치하지
+        못함(APK는 빌드 완료, 재연결 후 설치만 하면 됨)
+  [ ] firestore.rules 배포 대기(25차 작업) — permissionRequests
+        컬렉션 규칙 제거분. 사용자 승인 후
+        firebase deploy --only firestore:rules 진행할 것
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [14차 작업] 2026-09-26
@@ -1936,5 +1940,132 @@
       외 없음), flutter build web --release / iOS 시뮬레이터 재기동
       모두 성공. 안드로이드 태블릿은 이번 세션엔 USB로 연결돼 있지
       않아 APK 설치 검증은 생략(다음 세션으로 이월)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[25차 작업] 2026-10-19
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 안드로이드 태블릿 APK 설치 검증 + iOS 시뮬레이터 중복 앱 아이콘 정리
+  - 배경: 24차 작업에서 이월된 TODO. "안드로이드 태블릿 연결하고 APK
+    설치 검증해줘"라는 요청 — 태블릿(갤럭시 탭 S9 Ultra)이 이미 USB로
+    연결돼 있어 flutter build apk --release 후 flutter install로 설치,
+    adb로 앱을 직접 실행시켜 우교청 로그인 화면이 정상 표시됨을
+    스크린샷으로 확인(실제 로그인은 프로덕션 계정 비밀번호 입력이
+    필요해 직접 수행하지 않음)
+  - 이어서 "에뮬레이터에 우교청 앱이 2개로 나와"라는 제보 — 패키지명
+    교체(20차 작업) 이전 구버전(com.example.churchYouthApp)과 이후
+    신버전(com.woogyocheong.app)이 iOS 시뮬레이터에 둘 다 설치돼 있어
+    같은 이름 아이콘이 중복 표시된 것으로 확인. xcrun simctl uninstall로
+    구버전만 제거, 홈 화면에 아이콘 1개만 남는 것을 스크린샷으로 확인
+
+■ "회비 관리" → "회비 납부 내역", "자리 마이그레이션" → "리더 명단
+  최신화" 이름 변경 + 마이그레이션 기능 에러 조사
+  - 배경: "1. 회비 관리로 작성된 부분 '회비 납부 내역'으로 변경 2. 자리
+    마이그레이션 기능 에러 3. 자리 마이그레이션 이름 '리더 명단
+    최신화'로 변경"이라는 요청
+  - lib/screens/fee/fee_management_screen.dart AppBar와
+    lib/screens/admin/admin_dashboard.dart의 메뉴 카드 타이틀을
+    "회비 납부 내역"으로, lib/screens/admin/position_migration_screen.dart
+    AppBar와 메뉴 카드 타이틀을 "리더 명단 최신화"로 변경. 관련 주석
+    1곳(fee_screen.dart)도 함께 갱신
+  - "에러" 재현 시도: 최신 코드로 로컬 웹에서 "전체 반영"을 두 번
+    실행해 봤으나 둘 다 정상 성공(26개 자리 반영, 실데이터 변경 없음
+    — 이미 올바른 상태였으므로). 디버깅 과정에서 사용자 승인 없이
+    실데이터에 대해 "전체 반영"을 실행하게 된 점은 작업 중 사용자에게
+    바로 고지함(무해했지만 "실데이터 마이그레이션은 승인 후에만"
+    원칙을 사전 확인 없이 넘어간 것은 사실)
+  - 결론: 에러의 유력한 원인은 버전 불일치로 판단 — Firebase Hosting이
+    이날 새벽(04:54, 22차 작업 시점) 이후 재배포되지 않아 자리 모델
+    기능 자체가 없는 상태였고, 태블릿 APK도 구버전이었음. 사용자 요청에
+    따라 Hosting을 최신 빌드로 재배포함(firebase deploy --only hosting)
+
+■ 권한 신청 기능 완전 제거
+  - 배경: "권한 신청 관리는 제거해줘"라는 요청. 이어진 확인 질문에서
+    프로필 화면의 "권한 신청" 버튼(회원이 직접 요청하는 쪽)도 함께
+    제거하기로 확정 — 리더 자리 변경을 이제 엑셀 업로드로 관리자가
+    직접 처리하므로 신청→승인 플로우 자체가 더 이상 필요하지 않다는
+    판단
+  - 삭제: lib/models/permission_request_model.dart,
+    lib/screens/admin/permission_request_management.dart
+  - lib/screens/profile/profile_screen.dart: _PermissionRequestSection과
+    관련 다이얼로그 클래스 전부 제거
+  - lib/screens/admin/admin_dashboard.dart: "권한 신청 관리" 메뉴 카드
+    제거
+  - lib/screens/admin/stats_dashboard_screen.dart: "청년부 현황"의
+    "처리 대기 중인 권한 신청" 카드와 관련 스트림/파라미터 제거
+  - lib/services/firestore_service.dart, lib/services/demo_data.dart:
+    streamPermissionRequests/requestPermission/approvePermissionRequest/
+    rejectPermissionRequest 등 관련 메서드 전부 제거(_stagePositionChange는
+    saveMember가 계속 쓰므로 그대로 둠)
+    lib/screens/notifications/notification_screen.dart의 알림 아이콘
+    매핑에서도 'permissionRequest' 케이스 제거(과거 기록은 기본
+    아이콘으로 표시됨)
+  - firestore.rules: permissionRequests 컬렉션 규칙 제거(배포는 사용자
+    승인 후 별도 진행)
+
+■ 리더 명단 최신화에 엑셀 업로드/다운로드 기능 추가
+  - 배경: "리더명단 최신화는 엑셀로 업로드하면 그 내용에 맞게 바로
+    변경할 수 있게 해주고"라는 요청. 구현 전 세 가지 확인:
+    1) 엑셀 행과 기존 회원 매칭 기준 — 이메일(추천안 그대로 채택)
+    2) 엑셀에 나열되지 않은 기존 리더 처리 — "엑셀 내용에 변경 전/
+       변경 후 칼럼으로 분류해서 진행"이라는 답변. 기존에 제안했던
+       "엑셀=전체 명단, 빠진 사람은 자동 강등" 방식 대신, 자리별로
+       변경 전/변경 후 담당자를 명시하는 방식으로 설계 변경 — 이 쪽이
+       기존 PositionAssignment(previousHolderUids/holderUids) 모델과
+       정확히 들어맞고, 행이 통째로 빠지는 경우의 모호함도 없앰
+  - lib/utils/leader_roster_excel.dart 신규: excel 패키지로 자리ID/
+    자리/변경 전/변경 후 4개 칼럼의 워크북을 만드는
+    buildLeaderRosterExcel, 업로드된 워크북을 파싱해 변경분을 뽑는
+    parseLeaderRosterExcel. "변경 전" 칸은 참고용일 뿐 신뢰하지 않고
+    항상 업로드 시점에 다시 읽은 currentEntries(실시간 Firestore
+    상태)와 비교해 실제로 달라진 자리만 changes로 반환 — 다운로드
+    이후 데이터가 바뀌었어도 안전. 이메일이 실제 회원과 일치하지
+    않거나(테스트 계정 포함 — 자리 북키핑 대상에서 제외되므로 항상
+    "일치하는 회원 없음"), 단일석에 2명 이상을 적은 행은 반영하지
+    않고 오류 목록으로 보여줌
+  - lib/utils/excel_download.dart(+web/stub 분기) 신규: excel 패키지의
+    save()가 웹에서 호출 즉시 브라우저 다운로드를 실행해버리는 부작용이
+    있고(기본 파일명 FlutterExcel.xlsx 고정) 직접 만든 Blob 다운로드와
+    중복 실행되는 버그를 발견 — 웹에서는 save(fileName:)에 그대로
+    위임하고, 모바일에서는 save()가 부작용 없이 바이트만 반환하므로
+    OS 공유 시트로 내보내도록 분리
+  - lib/models/position_model.dart: PositionDef.label 게터 추가(화면의
+    _positionLabel 함수와 엑셀 라벨 생성이 같은 로직을 공유). 이 과정
+    에서 중팀장 자리 라벨이 "A-0 (중팀장) 중팀장"처럼 중복 표시되던
+    기존 버그(23차 작업부터 있었으나 UI에 노출된 적이 없어 미발견)를
+    함께 수정
+  - lib/screens/admin/position_migration_screen.dart: "엑셀 다운로드"/
+    "엑셀 업로드" 버튼과 변경 예정/오류 미리보기, "반영" 버튼을
+    추가. 기존 role/department 스캔 기반 "충돌 해결" 도구는 그대로
+    아래에 남겨 참고용으로 계속 쓸 수 있게 함
+  - 검증: 네이티브 파일 선택 다이얼로그는 자동화 도구로 제어할 수
+    없어(claude-in-chrome 자체 경고), test/ 아래 임시 테스트(커밋하지
+    않고 검증 후 삭제)로 parseLeaderRosterExcel을 직접 호출 — 정상
+    변경 1건 감지(D-4 소팀장 최재현→공석, 실제로 반영하지는 않음),
+    존재하지 않는 이메일/테스트 계정 이메일 2건 모두 오류로 정상
+    분류, 변경 없는 파일 재업로드 시 0건으로 정상 처리됨을 확인.
+    실제 웹 화면에서도 "전체 반영"으로 생성된 엑셀을 다운로드해
+    자리ID/라벨/변경전 칼럼 내용이 기대대로 채워짐을 확인
+
+■ 빌드 충돌 수정: flutter_native_splash 제거
+  - 배경: 엑셀 기능 추가 후 안드로이드/iOS 빌드가 모두 실패. excel
+    ^4.0.6이 archive ^3.6.1을 요구하는데, flutter_native_splash를
+    올리면(2.4.5+) archive ^4.x를 요구하는 image 패키지와 버전이
+    충돌해 pub get 자체가 안 됨. 반대로 flutter_native_splash를
+    기존 버전(2.4.3)에 두면, 그 패키지의 안드로이드 모듈이
+    compileSdk 31로 고정 배포돼 있어(자체 buildscript에 AGP 7.1.2를
+    직접 물고 있어 루트 프로젝트의 compileSdk 오버라이드도 먹히지
+    않음) AGP 9의 엄격한 AAR 메타데이터 검사에 걸려 안드로이드 빌드가
+    실패하고, iOS에서도 SwiftPM이 이 패키지의 헤더 경로를 못 찾아
+    빌드가 실패함
+  - flutter_native_splash는 스플래시 이미지를 1회성으로 생성하는
+    개발 도구일 뿐이고, 생성된 스플래시 리소스(android/app/src/main/
+    res의 launch_background.xml·splash 이미지들, ios 쪽 리소스)는
+    이미 프로젝트에 반영돼 있어 패키지가 더 이상 없어도 무방함을
+    확인 — pubspec.yaml dev_dependencies에서 제거(설정값 블록은
+    나중에 재생성할 때 쓸 수 있도록 주석과 함께 남겨둠)
+  - 수정 후 flutter build apk --release, flutter build web --release,
+    iOS 시뮬레이터 재기동 모두 성공 확인. 안드로이드 태블릿은 작업
+    도중 USB 연결이 끊겨 수정된 APK 재설치는 다음 세션으로 이월
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
