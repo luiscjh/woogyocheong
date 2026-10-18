@@ -11,6 +11,7 @@ import '../models/new_family_rotation_model.dart';
 import '../models/banner_model.dart';
 import '../models/ministry_meeting_model.dart';
 import '../models/notification_model.dart';
+import '../models/position_model.dart';
 import '../utils/constants.dart';
 
 // 싱글턴 인메모리 저장소 – 데모 모드에서 Firebase 대신 사용
@@ -97,6 +98,15 @@ class DemoData {
   final List<BannerModel> _banners = [];
   final List<MinistryMeetingModel> _ministryMeetings = [];
   final List<NotificationModel> _notifications = [];
+  // 자리(positions) — 현재 _users 목록을 스캔해 초기화하므로, 데모 계정 구성이
+  // 바뀌어도 수동으로 다시 맞출 필요 없이 항상 실제 데모 holder와 일치한다
+  late final List<PositionModel> _positions = PositionRegistry.all.map((def) {
+    final holders = _users
+        .where((u) => PositionRegistry.idFor(role: u.role, department: u.department) == def.id)
+        .map((u) => u.uid)
+        .toList();
+    return PositionModel(id: def.id, role: def.role, department: def.department, capacity: def.capacity, holderUids: holders, updatedAt: DateTime.now(), updatedBy: 'system');
+  }).toList();
 
   // StreamControllers
   final _usersCtrl = StreamController<List<UserModel>>.broadcast();
@@ -109,6 +119,7 @@ class DemoData {
   final _bannersCtrl = StreamController<List<BannerModel>>.broadcast();
   final _ministryMeetingsCtrl = StreamController<List<MinistryMeetingModel>>.broadcast();
   final _notificationsCtrl = StreamController<List<NotificationModel>>.broadcast();
+  final _positionsCtrl = StreamController<List<PositionModel>>.broadcast();
 
   void _initDemoData() {
     final now = DateTime.now();
@@ -277,6 +288,97 @@ class DemoData {
 
   void deleteUser(String uid) {
     _users.removeWhere((u) => u.uid == uid);
+    _usersCtrl.add(List.from(_users));
+  }
+
+  List<UserModel> allMembersSnapshot() => List.from(_users);
+
+  // ── Positions (자리) ───────────────────────────────────────
+  Stream<List<PositionModel>> streamAllPositions() {
+    Future.microtask(() => _positionsCtrl.add(List.from(_positions)));
+    return _positionsCtrl.stream;
+  }
+
+  PositionModel? getPosition(String id) {
+    try {
+      return _positions.firstWhere((p) => p.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // 실 Firestore의 FirestoreService._stagePositionChange와 동일한 로직의
+  // 인메모리 버전 — target의 role/department를 바꿀 때 필요한 자리 갱신
+  // (전임자 강등 + positions 목록 갱신)을 수행하고 반영할 role/department를 반환
+  ({String role, String department, bool resetMinistry}) stagePositionChange({
+    required UserModel target,
+    required String newRole,
+    required String newDepartment,
+  }) {
+    final oldPositionId = PositionRegistry.idFor(role: target.role, department: target.department);
+    final newPositionId = PositionRegistry.idFor(role: newRole, department: newDepartment);
+    if (oldPositionId == newPositionId) {
+      return (role: newRole, department: newDepartment, resetMinistry: false);
+    }
+
+    if (oldPositionId != null) {
+      final idx = _positions.indexWhere((p) => p.id == oldPositionId);
+      if (idx != -1) {
+        _positions[idx] = _positions[idx].copyWith(
+          holderUids: _positions[idx].holderUids.where((u) => u != target.uid).toList(),
+          updatedAt: DateTime.now(),
+        );
+      }
+    }
+
+    var resetMinistry = false;
+    if (newPositionId != null) {
+      final def = PositionRegistry.byId(newPositionId)!;
+      final idx = _positions.indexWhere((p) => p.id == newPositionId);
+      final currentHolders = idx != -1 ? _positions[idx].holderUids : <String>[];
+      if (def.capacity == 1 && currentHolders.isNotEmpty && currentHolders.first != target.uid) {
+        final demotedUid = currentHolders.first;
+        final dIdx = _users.indexWhere((u) => u.uid == demotedUid);
+        if (dIdx != -1) _users[dIdx] = _users[dIdx].copyWith(role: UserRole.member, permissions: const []);
+      }
+      final newHolders = def.capacity == 1 ? [target.uid] : {...currentHolders, target.uid}.toList();
+      final updatedPos = PositionModel(
+        id: newPositionId, role: def.role, department: def.department, capacity: def.capacity,
+        holderUids: newHolders, updatedAt: DateTime.now(), updatedBy: 'demo',
+      );
+      if (idx != -1) { _positions[idx] = updatedPos; } else { _positions.add(updatedPos); }
+      resetMinistry = newRole == UserRole.executive;
+    }
+
+    _positionsCtrl.add(List.from(_positions));
+    _usersCtrl.add(List.from(_users));
+    return (role: newRole, department: newDepartment, resetMinistry: resetMinistry);
+  }
+
+  // 실 Firestore의 FirestoreService.applyPositionAssignments와 동일한 로직의
+  // 인메모리 버전 — 마이그레이션 충돌 해결 등에서 자리 하나의 최종 holder
+  // 목록을 그대로 지정할 때 사용
+  void applyPositionAssignment(PositionAssignment a, {required String performedBy}) {
+    final idx = _positions.indexWhere((p) => p.id == a.positionId);
+    final updatedPos = PositionModel(
+      id: a.positionId, role: a.role, department: a.department, capacity: a.capacity,
+      holderUids: a.holderUids, updatedAt: DateTime.now(), updatedBy: performedBy,
+    );
+    if (idx != -1) { _positions[idx] = updatedPos; } else { _positions.add(updatedPos); }
+
+    for (final uid in a.previousHolderUids.where((u) => !a.holderUids.contains(u))) {
+      final uIdx = _users.indexWhere((u) => u.uid == uid);
+      if (uIdx != -1) _users[uIdx] = _users[uIdx].copyWith(role: UserRole.member, permissions: const []);
+    }
+    for (final uid in a.holderUids.where((u) => !a.previousHolderUids.contains(u))) {
+      final uIdx = _users.indexWhere((u) => u.uid == uid);
+      if (uIdx != -1) {
+        _users[uIdx] = a.role == UserRole.executive
+            ? _users[uIdx].copyWith(role: a.role, department: a.department, ministryTeam: '', isMinistryLead: false, bannerAccessGranted: false)
+            : _users[uIdx].copyWith(role: a.role, department: a.department);
+      }
+    }
+    _positionsCtrl.add(List.from(_positions));
     _usersCtrl.add(List.from(_users));
   }
 
