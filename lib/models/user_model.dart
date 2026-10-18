@@ -19,6 +19,9 @@ class UserModel {
   // 완전히 독립된 별도 소속 축. 소팀장·일반 팀원이 자기 팀은 그대로 유지한
   // 채 추가로 소속될 수 있음. 빈 문자열이면 사역팀 미소속
   final String ministryTeam;
+  // 임원팀(role=executive) 세부 직책(회장/부회장/총무/회계) — role=executive이면
+  // 반드시 ExecutiveTitle.all 중 하나여야 하고, 그 외 role이면 빈 문자열
+  final String executiveTitle;
   // 사역팀장 여부 (ministryTeam이 설정된 경우에만 의미 있음)
   final bool isMinistryLead;
   // 배너 관리 권한 공유 여부 — 사역팀장이 아닌 일반 사역팀 팀원 중, 팀장이
@@ -46,6 +49,7 @@ class UserModel {
     this.permissions = const [],
     this.newFamilyGraduatedTo,
     this.ministryTeam = '',
+    this.executiveTitle = '',
     this.isMinistryLead = false,
     this.bannerAccessGranted = false,
     this.birthDate,
@@ -81,6 +85,7 @@ class UserModel {
       permissions: List<String>.from(data['permissions'] ?? []),
       newFamilyGraduatedTo: data['newFamilyGraduatedTo'],
       ministryTeam: data['ministryTeam'] ?? '',
+      executiveTitle: data['executiveTitle'] ?? '',
       isMinistryLead: data['isMinistryLead'] ?? false,
       bannerAccessGranted: data['bannerAccessGranted'] ?? false,
       birthDate: (data['birthDate'] as Timestamp?)?.toDate(),
@@ -100,6 +105,7 @@ class UserModel {
       'permissions': permissions,
       'newFamilyGraduatedTo': newFamilyGraduatedTo,
       'ministryTeam': ministryTeam,
+      'executiveTitle': executiveTitle,
       'isMinistryLead': isMinistryLead,
       'bannerAccessGranted': bannerAccessGranted,
       'birthDate': birthDate != null ? Timestamp.fromDate(birthDate!) : null,
@@ -118,6 +124,7 @@ class UserModel {
     List<String>? permissions,
     String? newFamilyGraduatedTo,
     String? ministryTeam,
+    String? executiveTitle,
     bool? isMinistryLead,
     bool? bannerAccessGranted,
     DateTime? birthDate,
@@ -135,6 +142,7 @@ class UserModel {
       permissions: permissions ?? this.permissions,
       newFamilyGraduatedTo: newFamilyGraduatedTo ?? this.newFamilyGraduatedTo,
       ministryTeam: ministryTeam ?? this.ministryTeam,
+      executiveTitle: executiveTitle ?? this.executiveTitle,
       isMinistryLead: isMinistryLead ?? this.isMinistryLead,
       bannerAccessGranted: bannerAccessGranted ?? this.bannerAccessGranted,
       birthDate: birthDate ?? this.birthDate,

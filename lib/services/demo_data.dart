@@ -47,8 +47,9 @@ class DemoData {
     // 목사님 (관리자와 동일한 권한 + 심방 신청 내용은 목사님과 신청자 본인만 조회 가능)
     UserModel(uid: 'pastor001', name: '최목사', email: 'pastor@church.com', phone: '010-0000-1111', role: 'pastor', department: 'A-1', joinDate: DateTime(2019, 1, 1), cohort: 6),
     // 임원팀 (소팀 없이 임원팀 자체가 소속팀)
-    UserModel(uid: 'exec001', name: '이임원', email: 'exec@church.com', phone: '010-1111-2222', role: 'executive', department: AppTeams.executiveTeam, joinDate: DateTime(2020, 6, 1), cohort: 12),
-    UserModel(uid: 'exec002', name: '박임원', email: 'execb@church.com', phone: '010-1111-3333', role: 'executive', department: AppTeams.executiveTeam, joinDate: DateTime(2020, 6, 1), cohort: 13),
+    // 임원팀은 모두 세부 직책(회장/부회장/총무/회계) 필수 — 총무만 다인 가능
+    UserModel(uid: 'exec001', name: '이임원', email: 'exec@church.com', phone: '010-1111-2222', role: 'executive', department: AppTeams.executiveTeam, joinDate: DateTime(2020, 6, 1), cohort: 12, executiveTitle: ExecutiveTitle.president),
+    UserModel(uid: 'exec002', name: '박임원', email: 'execb@church.com', phone: '010-1111-3333', role: 'executive', department: AppTeams.executiveTeam, joinDate: DateTime(2020, 6, 1), cohort: 13, executiveTitle: ExecutiveTitle.secretary),
     // 중팀장
     UserModel(uid: 'mid001', name: '박중팀', email: 'mid@church.com', phone: '010-2222-3333', role: 'mid_leader', department: 'A-0', joinDate: DateTime(2021, 1, 1), cohort: 17),
     UserModel(uid: 'mid002', name: '최중팀', email: 'midb@church.com', phone: '010-3333-4444', role: 'mid_leader', department: 'B-0', joinDate: DateTime(2021, 1, 1), cohort: 18),
@@ -102,7 +103,7 @@ class DemoData {
   // 바뀌어도 수동으로 다시 맞출 필요 없이 항상 실제 데모 holder와 일치한다
   late final List<PositionModel> _positions = PositionRegistry.all.map((def) {
     final holders = _users
-        .where((u) => PositionRegistry.idFor(role: u.role, department: u.department) == def.id)
+        .where((u) => PositionRegistry.idFor(role: u.role, department: u.department, executiveTitle: u.executiveTitle) == def.id)
         .map((u) => u.uid)
         .toList();
     return PositionModel(id: def.id, role: def.role, department: def.department, capacity: def.capacity, holderUids: holders, updatedAt: DateTime.now(), updatedBy: 'system');
@@ -310,18 +311,20 @@ class DemoData {
   // 실 Firestore의 FirestoreService._stagePositionChange와 동일한 로직의
   // 인메모리 버전 — target의 role/department를 바꿀 때 필요한 자리 갱신
   // (전임자 강등 + positions 목록 갱신)을 수행하고 반영할 role/department를 반환
-  ({String role, String department, bool resetMinistry}) stagePositionChange({
+  ({String role, String department, String executiveTitle, bool resetMinistry}) stagePositionChange({
     required UserModel target,
     required String newRole,
     required String newDepartment,
+    String newExecutiveTitle = '',
   }) {
+    final finalExecutiveTitle = newRole == UserRole.executive ? newExecutiveTitle : '';
     if (target.email == 'testing@church.com') {
-      return (role: newRole, department: newDepartment, resetMinistry: false);
+      return (role: newRole, department: newDepartment, executiveTitle: finalExecutiveTitle, resetMinistry: false);
     }
-    final oldPositionId = PositionRegistry.idFor(role: target.role, department: target.department);
-    final newPositionId = PositionRegistry.idFor(role: newRole, department: newDepartment);
+    final oldPositionId = PositionRegistry.idFor(role: target.role, department: target.department, executiveTitle: target.executiveTitle);
+    final newPositionId = PositionRegistry.idFor(role: newRole, department: newDepartment, executiveTitle: newExecutiveTitle);
     if (oldPositionId == newPositionId) {
-      return (role: newRole, department: newDepartment, resetMinistry: false);
+      return (role: newRole, department: newDepartment, executiveTitle: finalExecutiveTitle, resetMinistry: false);
     }
 
     if (oldPositionId != null) {
@@ -342,7 +345,7 @@ class DemoData {
       if (def.capacity == 1 && currentHolders.isNotEmpty && currentHolders.first != target.uid) {
         final demotedUid = currentHolders.first;
         final dIdx = _users.indexWhere((u) => u.uid == demotedUid);
-        if (dIdx != -1) _users[dIdx] = _users[dIdx].copyWith(role: UserRole.member, permissions: const []);
+        if (dIdx != -1) _users[dIdx] = _users[dIdx].copyWith(role: UserRole.member, permissions: const [], executiveTitle: '');
       }
       final newHolders = def.capacity == 1 ? [target.uid] : {...currentHolders, target.uid}.toList();
       final updatedPos = PositionModel(
@@ -355,7 +358,7 @@ class DemoData {
 
     _positionsCtrl.add(List.from(_positions));
     _usersCtrl.add(List.from(_users));
-    return (role: newRole, department: newDepartment, resetMinistry: resetMinistry);
+    return (role: newRole, department: newDepartment, executiveTitle: finalExecutiveTitle, resetMinistry: resetMinistry);
   }
 
   // 실 Firestore의 FirestoreService.applyPositionAssignments와 동일한 로직의
@@ -371,14 +374,14 @@ class DemoData {
 
     for (final uid in a.previousHolderUids.where((u) => !a.holderUids.contains(u))) {
       final uIdx = _users.indexWhere((u) => u.uid == uid);
-      if (uIdx != -1) _users[uIdx] = _users[uIdx].copyWith(role: UserRole.member, permissions: const []);
+      if (uIdx != -1) _users[uIdx] = _users[uIdx].copyWith(role: UserRole.member, permissions: const [], executiveTitle: '');
     }
     for (final uid in a.holderUids.where((u) => !a.previousHolderUids.contains(u))) {
       final uIdx = _users.indexWhere((u) => u.uid == uid);
       if (uIdx != -1) {
         _users[uIdx] = a.role == UserRole.executive
-            ? _users[uIdx].copyWith(role: a.role, department: a.department, ministryTeam: '', isMinistryLead: false, bannerAccessGranted: false)
-            : _users[uIdx].copyWith(role: a.role, department: a.department);
+            ? _users[uIdx].copyWith(role: a.role, department: a.department, executiveTitle: a.executiveTitle, ministryTeam: '', isMinistryLead: false, bannerAccessGranted: false)
+            : _users[uIdx].copyWith(role: a.role, department: a.department, executiveTitle: '');
       }
     }
     _positionsCtrl.add(List.from(_positions));

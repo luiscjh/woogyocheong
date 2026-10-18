@@ -35,6 +35,8 @@ class PermissionRequestModel {
   final String? targetDepartment;
   // requestType이 ministryTeam일 때 요청 대상 사역팀(예: '콘텐츠팀')
   final String? targetMinistryTeam;
+  // requestType이 executive일 때 요청 대상 직책(회장/부회장/총무/회계)
+  final String? targetExecutiveTitle;
 
   PermissionRequestModel({
     required this.id,
@@ -46,9 +48,11 @@ class PermissionRequestModel {
     required this.requestType,
     this.targetDepartment,
     this.targetMinistryTeam,
+    this.targetExecutiveTitle,
   });
 
-  // 신청 대상을 한 줄로 표시: "중팀장 (A-0 (중팀장))", "사역팀 (콘텐츠팀)" 등
+  // 신청 대상을 한 줄로 표시: "중팀장 (A-0 (중팀장))", "사역팀 (콘텐츠팀)",
+  // "임원팀 (회장)" 등
   String get targetLabel {
     switch (requestType) {
       case PermissionRequestType.midLeader:
@@ -57,6 +61,9 @@ class PermissionRequestModel {
         return dept == null
             ? PermissionRequestType.label(requestType)
             : '${PermissionRequestType.label(requestType)} (${AppTeams.deptLabel(dept)})';
+      case PermissionRequestType.executive:
+        final title = targetExecutiveTitle;
+        return title == null ? '임원팀' : '임원팀 ($title)';
       case PermissionRequestType.ministryTeam:
         final team = targetMinistryTeam;
         return team == null ? '사역팀' : '사역팀 ($team)';
@@ -77,6 +84,7 @@ class PermissionRequestModel {
       requestType: data['requestType'] ?? PermissionRequestType.pastor,
       targetDepartment: data['targetDepartment'],
       targetMinistryTeam: data['targetMinistryTeam'],
+      targetExecutiveTitle: data['targetExecutiveTitle'],
     );
   }
 
@@ -90,6 +98,7 @@ class PermissionRequestModel {
       'requestType': requestType,
       'targetDepartment': targetDepartment,
       'targetMinistryTeam': targetMinistryTeam,
+      'targetExecutiveTitle': targetExecutiveTitle,
     };
   }
 }

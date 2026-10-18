@@ -94,10 +94,11 @@ class FirestoreService {
     final target = previous ??
         UserModel(uid: updated.uid, name: '', email: '', phone: '', role: UserRole.member, department: '', joinDate: updated.joinDate);
     if (demoMode) {
-      final r = _demo.stagePositionChange(target: target, newRole: updated.role, newDepartment: updated.department);
+      final r = _demo.stagePositionChange(target: target, newRole: updated.role, newDepartment: updated.department, newExecutiveTitle: updated.executiveTitle);
       final finalUser = updated.copyWith(
         role: r.role,
         department: r.department,
+        executiveTitle: r.executiveTitle,
         ministryTeam: r.resetMinistry ? '' : null,
         isMinistryLead: r.resetMinistry ? false : null,
         bannerAccessGranted: r.resetMinistry ? false : null,
@@ -107,10 +108,11 @@ class FirestoreService {
     }
     late final UserModel finalUser0;
     await _db.runTransaction((txn) async {
-      final r = await _stagePositionChange(txn, target: target, newRole: updated.role, newDepartment: updated.department, performedBy: performedBy);
+      final r = await _stagePositionChange(txn, target: target, newRole: updated.role, newDepartment: updated.department, newExecutiveTitle: updated.executiveTitle, performedBy: performedBy);
       final finalUser = updated.copyWith(
         role: r.role,
         department: r.department,
+        executiveTitle: r.executiveTitle,
         ministryTeam: r.resetMinistry ? '' : null,
         isMinistryLead: r.resetMinistry ? false : null,
         bannerAccessGranted: r.resetMinistry ? false : null,
@@ -160,26 +162,30 @@ class FirestoreService {
   // QA 테스트 계정(testing@church.com)은 자리 북키핑 대상에서 완전히 제외한다 —
   // 자리 자동 강등/충돌 집계에 실제 데이터처럼 섞이면 안 되므로, 호출자가 누구든
   // (saveMember, approvePermissionRequest 등) 이 함수 한 곳에서 막는다.
-  // 반환값은 target의 users 문서에 최종 반영해야 할 role/department(+ 임원팀
-  // 승격 시 사역팀 필드 초기화 여부)이며, 자리가 바뀌지 않았어도(또는 테스트
-  // 계정이라 자리 자체를 건드리지 않았어도) 호출자가 그대로 쓸 수 있도록 항상
-  // newRole/newDepartment를 담아 돌려준다.
-  Future<({String role, String department, bool resetMinistry})> _stagePositionChange(
+  // 반환값은 target의 users 문서에 최종 반영해야 할 role/department/
+  // executiveTitle(+ 임원팀 승격 시 사역팀 필드 초기화 여부)이며, 자리가
+  // 바뀌지 않았어도(또는 테스트 계정이라 자리 자체를 건드리지 않았어도) 호출자가
+  // 그대로 쓸 수 있도록 항상 담아 돌려준다. newExecutiveTitle은 newRole이
+  // executive일 때만 의미 있고(ExecutiveTitle.all 중 하나여야 함), 그 외 role이면
+  // 무시되고 결과의 executiveTitle은 항상 ''으로 정리된다.
+  Future<({String role, String department, String executiveTitle, bool resetMinistry})> _stagePositionChange(
     Transaction txn, {
     required UserModel target,
     required String newRole,
     required String newDepartment,
+    String newExecutiveTitle = '',
     required String performedBy,
   }) async {
+    final finalExecutiveTitle = newRole == UserRole.executive ? newExecutiveTitle : '';
     if (target.email == 'testing@church.com') {
-      return (role: newRole, department: newDepartment, resetMinistry: false);
+      return (role: newRole, department: newDepartment, executiveTitle: finalExecutiveTitle, resetMinistry: false);
     }
 
-    final oldPositionId = PositionRegistry.idFor(role: target.role, department: target.department);
-    final newPositionId = PositionRegistry.idFor(role: newRole, department: newDepartment);
+    final oldPositionId = PositionRegistry.idFor(role: target.role, department: target.department, executiveTitle: target.executiveTitle);
+    final newPositionId = PositionRegistry.idFor(role: newRole, department: newDepartment, executiveTitle: newExecutiveTitle);
 
     if (oldPositionId == newPositionId) {
-      return (role: newRole, department: newDepartment, resetMinistry: false);
+      return (role: newRole, department: newDepartment, executiveTitle: finalExecutiveTitle, resetMinistry: false);
     }
 
     // 모든 읽기를 먼저 수행(Firestore 트랜잭션 제약: 읽기는 쓰기보다 먼저)
@@ -206,8 +212,9 @@ class FirestoreService {
       final def = PositionRegistry.byId(newPositionId)!;
       final currentHolders = List<String>.from(newSnap?.data()?['holderUids'] ?? []);
       // 단일석(capacity==1)에 이미 다른 사람이 있으면 전임자를 팀원으로 강등
+      // (role이 더 이상 executive가 아니게 되므로 executiveTitle도 함께 비움)
       if (def.capacity == 1 && currentHolders.isNotEmpty && currentHolders.first != target.uid) {
-        txn.update(_db.collection('users').doc(currentHolders.first), {'role': UserRole.member, 'permissions': []});
+        txn.update(_db.collection('users').doc(currentHolders.first), {'role': UserRole.member, 'permissions': [], 'executiveTitle': ''});
       }
       final newHolders = def.capacity == 1 ? [target.uid] : {...currentHolders, target.uid}.toList();
       txn.set(_db.collection('positions').doc(newPositionId), {
@@ -221,7 +228,7 @@ class FirestoreService {
       resetMinistry = newRole == UserRole.executive;
     }
 
-    return (role: newRole, department: newDepartment, resetMinistry: resetMinistry);
+    return (role: newRole, department: newDepartment, executiveTitle: finalExecutiveTitle, resetMinistry: resetMinistry);
   }
 
   // 여러 자리를 한 번에(한 WriteBatch) 갱신. previousHolderUids와 holderUids를
@@ -244,10 +251,10 @@ class FirestoreService {
         'updatedBy': performedBy,
       });
       for (final uid in a.previousHolderUids.where((u) => !a.holderUids.contains(u))) {
-        batch.update(_db.collection('users').doc(uid), {'role': UserRole.member, 'permissions': []});
+        batch.update(_db.collection('users').doc(uid), {'role': UserRole.member, 'permissions': [], 'executiveTitle': ''});
       }
       for (final uid in a.holderUids.where((u) => !a.previousHolderUids.contains(u))) {
-        final update = <String, dynamic>{'role': a.role, 'department': a.department};
+        final update = <String, dynamic>{'role': a.role, 'department': a.department, 'executiveTitle': a.executiveTitle};
         if (a.role == UserRole.executive) {
           update['ministryTeam'] = '';
           update['isMinistryLead'] = false;
@@ -273,7 +280,7 @@ class FirestoreService {
         : (await _db.collection('users').get()).docs.map(UserModel.fromFirestore).toList();
     final realUsers = users.where((u) => u.email != 'testing@church.com').toList();
     return PositionRegistry.all.map((def) {
-      final matched = realUsers.where((u) => PositionRegistry.idFor(role: u.role, department: u.department) == def.id).toList();
+      final matched = realUsers.where((u) => PositionRegistry.idFor(role: u.role, department: u.department, executiveTitle: u.executiveTitle) == def.id).toList();
       return PositionMigrationEntry(def: def, matched: matched);
     }).toList();
   }
@@ -479,10 +486,14 @@ class FirestoreService {
           final newDept = request.requestType == PermissionRequestType.executive
               ? AppTeams.executiveTeam
               : (request.targetDepartment ?? requester.department);
-          final r = _demo.stagePositionChange(target: requester, newRole: newRole, newDepartment: newDept);
+          final r = _demo.stagePositionChange(
+            target: requester, newRole: newRole, newDepartment: newDept,
+            newExecutiveTitle: request.targetExecutiveTitle ?? '',
+          );
           updated = requester.copyWith(
             role: r.role,
             department: r.department,
+            executiveTitle: r.executiveTitle,
             ministryTeam: r.resetMinistry ? '' : null,
             isMinistryLead: r.resetMinistry ? false : null,
             bannerAccessGranted: r.resetMinistry ? false : null,
@@ -509,10 +520,14 @@ class FirestoreService {
           final newDept = request.requestType == PermissionRequestType.executive
               ? AppTeams.executiveTeam
               : (request.targetDepartment ?? requester.department);
-          final r = await _stagePositionChange(txn, target: requester, newRole: newRole, newDepartment: newDept, performedBy: performedBy);
+          final r = await _stagePositionChange(
+            txn, target: requester, newRole: newRole, newDepartment: newDept,
+            newExecutiveTitle: request.targetExecutiveTitle ?? '', performedBy: performedBy,
+          );
           updated = requester.copyWith(
             role: r.role,
             department: r.department,
+            executiveTitle: r.executiveTitle,
             ministryTeam: r.resetMinistry ? '' : null,
             isMinistryLead: r.resetMinistry ? false : null,
             bannerAccessGranted: r.resetMinistry ? false : null,

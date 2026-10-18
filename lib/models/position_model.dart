@@ -9,10 +9,12 @@ class PositionDef {
   final String id;
   final String role;
   final String department;
-  // null이면 무제한(다인 가능: 임원팀, 새가족팀 리더). 그 외에는 항상 1(단일석).
+  // null이면 무제한(다인 가능: 총무, 새가족팀 리더). 그 외에는 항상 1(단일석).
   final int? capacity;
+  // role=executive인 자리에서만 의미 있음(회장/부회장/총무/회계). 그 외엔 빈 문자열
+  final String executiveTitle;
 
-  const PositionDef({required this.id, required this.role, required this.department, this.capacity});
+  const PositionDef({required this.id, required this.role, required this.department, this.capacity, this.executiveTitle = ''});
 
   bool get isMultiSeat => capacity == null;
 }
@@ -20,10 +22,11 @@ class PositionDef {
 class PositionRegistry {
   PositionRegistry._();
 
-  // department+role 조합에서 자리 ID를 계산한다. 자리 모델 대상이 아닌 조합
-  // (role=member/admin/pastor, 또는 department가 해당 role과 맞지 않는 상태)은
-  // null을 반환한다 — 이 경우 호출자는 "자리 없음"으로 취급하면 된다.
-  static String? idFor({required String role, required String department}) {
+  // department+role(+임원팀이면 executiveTitle) 조합에서 자리 ID를 계산한다.
+  // 자리 모델 대상이 아닌 조합(role=member/admin/pastor, department가 맞지 않는
+  // 상태, 또는 role=executive인데 유효한 직책이 없는 상태)은 null을 반환한다 —
+  // 이 경우 호출자는 "자리 없음"으로 취급하면 된다.
+  static String? idFor({required String role, required String department, String executiveTitle = ''}) {
     switch (role) {
       case UserRole.midLeader:
         if (department == AppTeams.newFamilyTeam || department.endsWith('-0')) {
@@ -34,15 +37,19 @@ class PositionRegistry {
         if (AppTeams.smallTeams.contains(department)) return '${department}_small_leader';
         return null;
       case UserRole.executive:
-        if (department == AppTeams.executiveTeam) return '${department}_executive';
+        if (department == AppTeams.executiveTeam && ExecutiveTitle.all.contains(executiveTitle)) {
+          return '${department}_$executiveTitle';
+        }
         return null;
       default:
         return null;
     }
   }
 
-  // 전체 자리 목록(23개) — AppTeams.allDepts를 순회해 생성.
-  // 새가족팀만 예외적으로 두 자리(팀장=단일석, 리더=다인석)를 모두 가짐.
+  // 전체 자리 목록(26개: 중팀장 4 + 일반 소팀장 16 + 새가족팀장 1 + 새가족팀리더 1 +
+  // 임원팀 직책 4) — AppTeams.allDepts를 순회해 생성. 새가족팀은 예외적으로 두
+  // 자리(팀장=단일석, 리더=다인석)를 모두 가지고, 임원팀은 회장/부회장/총무/회계
+  // 4개 직책 자리로 세분화된다(총무만 다인석).
   static final List<PositionDef> all = _build();
 
   static final Map<String, PositionDef> _byId = {for (final d in all) d.id: d};
@@ -52,7 +59,15 @@ class PositionRegistry {
     final defs = <PositionDef>[];
     for (final dept in AppTeams.allDepts) {
       if (dept == AppTeams.executiveTeam) {
-        defs.add(PositionDef(id: '${dept}_executive', role: UserRole.executive, department: dept, capacity: null));
+        for (final title in ExecutiveTitle.all) {
+          defs.add(PositionDef(
+            id: '${dept}_$title',
+            role: UserRole.executive,
+            department: dept,
+            capacity: ExecutiveTitle.capacityFor(title),
+            executiveTitle: title,
+          ));
+        }
       } else if (dept == AppTeams.newFamilyTeam) {
         defs.add(PositionDef(id: '${dept}_mid_leader', role: UserRole.midLeader, department: dept, capacity: 1));
         defs.add(PositionDef(id: '${dept}_small_leader', role: UserRole.smallLeader, department: dept, capacity: null));
@@ -138,6 +153,8 @@ class PositionAssignment {
   final String role;
   final String department;
   final int? capacity;
+  // role=executive인 자리에서만 의미 있음(회장/부회장/총무/회계)
+  final String executiveTitle;
   final List<String> previousHolderUids;
   final List<String> holderUids;
 
@@ -146,6 +163,7 @@ class PositionAssignment {
     required this.role,
     required this.department,
     required this.capacity,
+    this.executiveTitle = '',
     required this.previousHolderUids,
     required this.holderUids,
   });

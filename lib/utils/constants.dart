@@ -97,6 +97,19 @@ class AppTeams {
   }
 }
 
+// 임원팀 세부 직책 — 임원팀(role=executive)은 반드시 이 중 하나를 가져야 한다
+// (UserModel.executiveTitle). 총무만 다인(多人) 가능, 나머지는 1명.
+class ExecutiveTitle {
+  static const president = '회장';
+  static const vicePresident = '부회장';
+  static const secretary = '총무';
+  static const treasurer = '회계';
+  static const all = [president, vicePresident, secretary, treasurer];
+
+  // null이면 다인(多人) 가능 — 자리(positions) 모델의 capacity 값과 동일한 의미
+  static int? capacityFor(String title) => title == secretary ? null : 1;
+}
+
 // 기수 기반 이용 제한 정책. 기수는 매년 1씩 자동으로 밀리므로(숫자가 높을수록
 // 나이가 어림), 기준 연도에 허용했던 범위만 고정해두면 이후 연도는 자동 계산된다.
 // 예: 2026년 24~30기 기준 -> 2027년엔 자동으로 25~31기
