@@ -13,6 +13,7 @@ import '../attendance/attendance_management_screen.dart';
 import '../fee/fee_management_screen.dart';
 import 'ministry_meeting_screen.dart';
 import 'stats_dashboard_screen.dart';
+import 'position_migration_screen.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
@@ -199,6 +200,14 @@ class AdminDashboard extends StatelessWidget {
               subtitle: '회원/리더의 권한 신청 승인/거절',
               color: Colors.brown,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PermissionRequestManagementScreen())),
+            ),
+            const SizedBox(height: 12),
+            _AdminMenuCard(
+              icon: Icons.sync_alt_outlined,
+              title: '자리 마이그레이션',
+              subtitle: '기존 회원 데이터를 자리(positions) 모델로 정비 (1회성 도구)',
+              color: Colors.teal,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PositionMigrationScreen())),
             ),
           ],
         ],
