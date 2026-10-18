@@ -9,8 +9,8 @@
 ---------|---------------------------|---------|------|----------------
 김관리   | admin@church.com          | 관리자  | 10기 | A-1
 최목사   | pastor@church.com         | 목사님  | 6기  | A-1
-이임원   | exec@church.com           | 임원팀  | 12기 | 임원팀
-박임원   | execb@church.com          | 임원팀  | 13기 | 임원팀
+이임원   | exec@church.com           | 임원팀  | 12기 | 임원팀 (직책: 회장)
+박임원   | execb@church.com          | 임원팀  | 13기 | 임원팀 (직책: 총무)
 박중팀   | mid@church.com            | 중팀장  | 17기 | A-0 (A중팀)
 최중팀   | midb@church.com           | 중팀장  | 18기 | B-0 (B중팀)
 정소팀   | small@church.com          | 소팀장  | 21기 | A-1
@@ -40,12 +40,15 @@
     보이는 '테스트 계정 - 역할 전환' 드롭다운으로 즉시 전환 가능
     (lib/screens/profile/profile_screen.dart _TestRoleSwitcherSection,
     이메일이 testing@church.com일 때만 노출)
-  - 선택지: 팀원 / 소팀장 / 중팀장 / 임원팀 / 목사님 / 관리자 /
-    새가족 / 새가족팀 리더 / 새가족팀 팀장 / 콘텐츠팀 팀원 /
-    콘텐츠팀 팀장 (11종) — 새가족 관련 항목은 role+department를 한
-    쌍으로 전환. 콘텐츠팀 항목은 department는 그대로(A-1) 둔 채
-    ministryTeam(사역팀 소속, department와 독립된 축)만 부여함
-    (콘텐츠팀 팀장은 role=팀원 + ministryTeam=콘텐츠팀 + 팀장 플래그)
+  - 선택지: 팀원 / 소팀장 / 중팀장 / 임원팀 회장 / 임원팀 부회장 /
+    임원팀 총무 / 임원팀 회계 / 목사님 / 관리자 / 새가족 /
+    새가족팀 리더 / 새가족팀 팀장 / 콘텐츠팀 팀장 (13종) — 새가족
+    관련 항목은 role+department를 한 쌍으로 전환. 임원팀은 23차
+    작업(자리 모델)에서 직책이 필수가 되어 4개 직책 모두 QA 가능하게
+    제공(총무만 다인석, 나머지는 단일석). 콘텐츠팀 항목은 department는
+    그대로(A-1) 둔 채 ministryTeam(사역팀 소속, department와 독립된
+    축)만 부여함(콘텐츠팀 팀장은 role=팀원 + ministryTeam=콘텐츠팀 +
+    팀장 플래그)
   - 다른 계정으로 로그인/로그아웃 반복할 필요 없이 한 계정으로 전체
     권한 레벨을 테스트하기 위한 용도
 
