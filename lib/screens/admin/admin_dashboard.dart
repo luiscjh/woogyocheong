@@ -4,7 +4,6 @@ import '../../providers/auth_provider.dart';
 import '../../utils/constants.dart';
 import 'member_management.dart';
 import 'banner_management.dart';
-import 'permission_request_management.dart';
 import 'new_family_management.dart';
 import 'new_family_rotation_management.dart';
 import 'small_leader_status_screen.dart';
@@ -195,17 +194,9 @@ class AdminDashboard extends StatelessWidget {
           if (auth.isAdmin) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
-              icon: Icons.verified_user_outlined,
-              title: '권한 신청 관리',
-              subtitle: '회원/리더의 권한 신청 승인/거절',
-              color: Colors.brown,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PermissionRequestManagementScreen())),
-            ),
-            const SizedBox(height: 12),
-            _AdminMenuCard(
               icon: Icons.sync_alt_outlined,
               title: '리더 명단 최신화',
-              subtitle: '기존 회원 데이터를 자리(positions) 모델로 정비 (1회성 도구)',
+              subtitle: '엑셀 업로드로 리더 자리 일괄 변경',
               color: Colors.teal,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PositionMigrationScreen())),
             ),

@@ -6,7 +6,6 @@ import '../models/attendance_model.dart';
 import '../models/fee_model.dart';
 import '../models/visit_model.dart';
 import '../models/visit_slot_model.dart';
-import '../models/permission_request_model.dart';
 import '../models/new_family_rotation_model.dart';
 import '../models/banner_model.dart';
 import '../models/ministry_meeting_model.dart';
@@ -94,7 +93,6 @@ class DemoData {
   final List<FeeModel> _fees = [];
   final List<VisitModel> _visits = [];
   final List<VisitSlotModel> _visitSlots = [];
-  final List<PermissionRequestModel> _permissionRequests = [];
   final List<NewFamilyRotationModel> _newFamilyRotations = [];
   final List<BannerModel> _banners = [];
   final List<MinistryMeetingModel> _ministryMeetings = [];
@@ -115,7 +113,6 @@ class DemoData {
   final _feesCtrl = StreamController<List<FeeModel>>.broadcast();
   final _visitsCtrl = StreamController<List<VisitModel>>.broadcast();
   final _visitSlotsCtrl = StreamController<List<VisitSlotModel>>.broadcast();
-  final _permissionRequestsCtrl = StreamController<List<PermissionRequestModel>>.broadcast();
   final _newFamilyRotationsCtrl = StreamController<List<NewFamilyRotationModel>>.broadcast();
   final _bannersCtrl = StreamController<List<BannerModel>>.broadcast();
   final _ministryMeetingsCtrl = StreamController<List<MinistryMeetingModel>>.broadcast();
@@ -524,51 +521,6 @@ class DemoData {
   void deleteVisitSlot(String id) {
     _visitSlots.removeWhere((s) => s.id == id);
     _visitSlotsCtrl.add(_sortedVisitSlots());
-  }
-
-  // ── Permission Requests (회원/리더 → 관리자에게 권한 신청) ──────────
-  Stream<List<PermissionRequestModel>> streamPermissionRequests() {
-    Future.microtask(() => _permissionRequestsCtrl.add(_sortedPermissionRequests()));
-    return _permissionRequestsCtrl.stream.map((_) => _sortedPermissionRequests());
-  }
-
-  Stream<List<PermissionRequestModel>> streamUserPermissionRequests(String userId) {
-    Future.microtask(() => _permissionRequestsCtrl.add(_sortedPermissionRequests()));
-    return _permissionRequestsCtrl.stream.map(
-      (_) => _sortedPermissionRequests().where((r) => r.userId == userId).toList(),
-    );
-  }
-
-  List<PermissionRequestModel> _sortedPermissionRequests() =>
-      (List<PermissionRequestModel>.from(_permissionRequests)..sort((a, b) => b.requestDate.compareTo(a.requestDate)));
-
-  void addPermissionRequest(PermissionRequestModel request) {
-    _permissionRequests.add(request);
-    _permissionRequestsCtrl.add(_sortedPermissionRequests());
-  }
-
-  void updatePermissionRequestStatus(String id, String status) {
-    final idx = _permissionRequests.indexWhere((r) => r.id == id);
-    if (idx >= 0) {
-      final r = _permissionRequests[idx];
-      _permissionRequests[idx] = PermissionRequestModel(
-        id: r.id, userId: r.userId, userName: r.userName, email: r.email,
-        requestDate: r.requestDate, status: status, requestType: r.requestType,
-        targetDepartment: r.targetDepartment, targetMinistryTeam: r.targetMinistryTeam,
-      );
-      addNotification(
-        userId: r.userId,
-        title: '권한 신청 결과',
-        body: status == 'approved' ? '${r.targetLabel} 권한 신청이 승인되었습니다.' : '${r.targetLabel} 권한 신청이 거절되었습니다.',
-        type: 'permissionRequest',
-      );
-    }
-    _permissionRequestsCtrl.add(_sortedPermissionRequests());
-  }
-
-  void deletePermissionRequest(String id) {
-    _permissionRequests.removeWhere((r) => r.id == id);
-    _permissionRequestsCtrl.add(_sortedPermissionRequests());
   }
 
   // ── New Family Rotation (새가족팀장이 등록하는 주차 1~3별 고정 담당 리더) ──

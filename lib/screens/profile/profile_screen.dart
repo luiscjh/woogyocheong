@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
-import '../../models/permission_request_model.dart';
 import '../../utils/constants.dart';
 import '../../widgets/warning_banner.dart';
 
@@ -103,11 +101,6 @@ class ProfileScreen extends StatelessWidget {
                   label: Text('${UserRole.label(user.role)} 역할 양도'),
                 ),
               ),
-            ],
-            if (user.role != UserRole.pastor && user.role != UserRole.admin &&
-                !(user.role == UserRole.member && user.department == AppTeams.newFamilyTeam)) ...[
-              const SizedBox(height: 20),
-              _PermissionRequestSection(user: user),
             ],
             const SizedBox(height: 32),
             SizedBox(
@@ -365,213 +358,6 @@ class _InfoItem {
   final String value;
 
   const _InfoItem({required this.icon, required this.label, required this.value});
-}
-
-// 현재 역할보다 위 단계의 역할이나 사역팀 소속을 관리자에게 신청하는 섹션.
-// 신청 가능한 종류는 현재 역할 기준으로 계산됨(예: 소팀장은 중팀장/임원팀만
-// 신청 가능, 소팀장 재신청은 불가). 목사님 역할은 이 신청으로 얻을 수 없고
-// 기존 목사님의 역할 양도(transferRole)를 통해서만 넘길 수 있음
-class _PermissionRequestSection extends StatelessWidget {
-  final UserModel user;
-
-  const _PermissionRequestSection({required this.user});
-
-  // member=0 ... executive=3, pastor/admin=4. 본인보다 순위가 높은 종류만 신청 가능
-  static int _roleRank(String role) {
-    if (role == UserRole.smallLeader) return 1;
-    if (role == UserRole.midLeader) return 2;
-    if (role == UserRole.executive) return 3;
-    if (role == UserRole.pastor || role == UserRole.admin) return 4;
-    return 0;
-  }
-
-  // 새가족팀 리더는 이미 소팀장이지만, 새가족팀이 아닌 실제 소팀의 소팀장으로도
-  // 신청할 수 있어야 하므로 예외적으로 소팀장 항목을 함께 보여줌
-  bool get _isNewFamilyLeader => user.role == UserRole.smallLeader && user.department == AppTeams.newFamilyTeam;
-
-  List<String> get _availableTypes {
-    final rank = _roleRank(user.role);
-    return [
-      if (rank < 1 || _isNewFamilyLeader) PermissionRequestType.smallLeader,
-      if (rank < 2) PermissionRequestType.midLeader,
-      if (rank < 3) PermissionRequestType.executive,
-      if (AppTeams.canJoinMinistryTeam(user.role) && user.ministryTeam.isEmpty) PermissionRequestType.ministryTeam,
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final types = _availableTypes;
-    if (types.isEmpty) return const SizedBox.shrink();
-
-    final service = FirestoreService();
-    return StreamBuilder<List<PermissionRequestModel>>(
-      stream: service.streamUserPermissionRequests(user.uid),
-      builder: (ctx, snap) {
-        final requests = snap.data ?? [];
-        final latest = requests.isNotEmpty ? requests.first : null;
-
-        if (latest?.status == 'pending') {
-          return Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.warning.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.hourglass_top, size: 18, color: AppColors.warning),
-                const SizedBox(width: 8),
-                Text('${latest!.targetLabel} 권한 신청 승인 대기중',
-                    style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          );
-        }
-
-        return SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () => _openRequestDialog(context, service, types),
-            icon: const Icon(Icons.verified_user_outlined),
-            label: const Text('권한 신청'),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _openRequestDialog(BuildContext context, FirestoreService service, List<String> types) async {
-    final result = await showDialog<_PermissionRequestChoice>(
-      context: context,
-      builder: (_) => _PermissionRequestDialog(types: types),
-    );
-    if (result == null || !context.mounted) return;
-
-    await service.requestPermission(PermissionRequestModel(
-      id: const Uuid().v4(),
-      userId: user.uid,
-      userName: user.name,
-      email: user.email,
-      requestDate: DateTime.now(),
-      status: 'pending',
-      requestType: result.type,
-      targetDepartment: result.targetDepartment,
-      targetMinistryTeam: result.targetMinistryTeam,
-      targetExecutiveTitle: result.targetExecutiveTitle,
-    ));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${PermissionRequestType.label(result.type)} 권한을 신청했습니다.'), backgroundColor: AppColors.success),
-    );
-  }
-}
-
-// 다이얼로그에서 확정된 신청 내용(종류 + 세부 대상)
-class _PermissionRequestChoice {
-  final String type;
-  final String? targetDepartment;
-  final String? targetMinistryTeam;
-  final String? targetExecutiveTitle;
-
-  const _PermissionRequestChoice(this.type, {this.targetDepartment, this.targetMinistryTeam, this.targetExecutiveTitle});
-}
-
-// 신청 종류를 고르고, 중팀장/소팀장/사역팀처럼 세부 대상이 필요한 경우
-// 이어서 드롭다운으로 선택하게 하는 다이얼로그
-class _PermissionRequestDialog extends StatefulWidget {
-  final List<String> types;
-  const _PermissionRequestDialog({required this.types});
-
-  @override
-  State<_PermissionRequestDialog> createState() => _PermissionRequestDialogState();
-}
-
-class _PermissionRequestDialogState extends State<_PermissionRequestDialog> {
-  late String _type = widget.types.first;
-  String? _target;
-
-  List<String> get _targetOptions {
-    switch (_type) {
-      case PermissionRequestType.midLeader:
-        return AppTeams.midTeams.map((m) => '$m-0').toList();
-      case PermissionRequestType.smallLeader:
-        return AppTeams.smallTeams;
-      case PermissionRequestType.executive:
-        return ExecutiveTitle.all;
-      case PermissionRequestType.ministryTeam:
-        return AppTeams.ministryTeams;
-      default:
-        return const [];
-    }
-  }
-
-  bool get _needsTarget => _targetOptions.isNotEmpty;
-
-  @override
-  Widget build(BuildContext context) {
-    final options = _targetOptions;
-    return AlertDialog(
-      title: const Text('권한 신청'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('신청할 권한을 선택해 주세요.'),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _type,
-            decoration: const InputDecoration(labelText: '권한 종류'),
-            items: widget.types
-                .map((t) => DropdownMenuItem(value: t, child: Text(PermissionRequestType.label(t))))
-                .toList(),
-            onChanged: (v) => setState(() {
-              _type = v!;
-              _target = null;
-            }),
-          ),
-          if (_needsTarget) ...[
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _target,
-              decoration: InputDecoration(
-                labelText: _type == PermissionRequestType.ministryTeam
-                    ? '사역팀'
-                    : _type == PermissionRequestType.executive
-                        ? '직책'
-                        : '소속팀',
-              ),
-              items: options
-                  .map((t) => DropdownMenuItem(value: t, child: Text(AppTeams.deptLabel(t))))
-                  .toList(),
-              onChanged: (v) => setState(() => _target = v),
-              hint: const Text('선택해 주세요'),
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-        ElevatedButton(
-          onPressed: _needsTarget && _target == null
-              ? null
-              : () => Navigator.pop(
-                    context,
-                    _PermissionRequestChoice(
-                      _type,
-                      targetDepartment:
-                          _type == PermissionRequestType.midLeader || _type == PermissionRequestType.smallLeader ? _target : null,
-                      targetMinistryTeam: _type == PermissionRequestType.ministryTeam ? _target : null,
-                      targetExecutiveTitle: _type == PermissionRequestType.executive ? _target : null,
-                    ),
-                  ),
-          child: const Text('신청'),
-        ),
-      ],
-    );
-  }
 }
 
 // 역할 + 소속(department)을 한 쌍으로 갖는 테스트 전환 옵션.

@@ -4,7 +4,6 @@ import '../models/attendance_model.dart';
 import '../models/fee_model.dart';
 import '../models/visit_model.dart';
 import '../models/visit_slot_model.dart';
-import '../models/permission_request_model.dart';
 import '../models/position_model.dart';
 import '../models/new_family_rotation_model.dart';
 import '../models/banner_model.dart';
@@ -160,8 +159,8 @@ class FirestoreService {
   // "모든 읽기가 모든 쓰기보다 먼저" 규칙이 있어, 아래에서 기존/신규 자리 문서를
   // 먼저 둘 다 읽은 뒤에만 쓴다.
   // QA 테스트 계정(testing@church.com)은 자리 북키핑 대상에서 완전히 제외한다 —
-  // 자리 자동 강등/충돌 집계에 실제 데이터처럼 섞이면 안 되므로, 호출자가 누구든
-  // (saveMember, approvePermissionRequest 등) 이 함수 한 곳에서 막는다.
+  // 자리 자동 강등/충돌 집계에 실제 데이터처럼 섞이면 안 되므로, 이 함수를 호출하는
+  // saveMember에서 이 지점 한 곳으로 막는다.
   // 반환값은 target의 users 문서에 최종 반영해야 할 role/department/
   // executiveTitle(+ 임원팀 승격 시 사역팀 필드 초기화 여부)이며, 자리가
   // 바뀌지 않았어도(또는 테스트 계정이라 자리 자체를 건드리지 않았어도) 호출자가
@@ -283,6 +282,19 @@ class FirestoreService {
       final matched = realUsers.where((u) => PositionRegistry.idFor(role: u.role, department: u.department, executiveTitle: u.executiveTitle) == def.id).toList();
       return PositionMigrationEntry(def: def, matched: matched);
     }).toList();
+  }
+
+  // 이메일(소문자/trim 정규화) → UserModel 매핑. 리더 명단 엑셀 업로드에서
+  // "변경 후" 칸에 적힌 이메일로 실제 회원을 찾는 데 사용. QA 테스트 계정은
+  // previewPositionMigration과 동일한 이유로 제외(엑셀로 자리에 지정할 수 없음)
+  Future<Map<String, UserModel>> fetchUsersByEmail() async {
+    final users = demoMode
+        ? _demo.allMembersSnapshot()
+        : (await _db.collection('users').get()).docs.map(UserModel.fromFirestore).toList();
+    return {
+      for (final u in users)
+        if (u.email.toLowerCase() != 'testing@church.com') u.email.trim().toLowerCase(): u,
+    };
   }
 
   // ── Attendance ────────────────────────────────────────────────────────
@@ -436,162 +448,6 @@ class FirestoreService {
   Future<void> deleteVisitSlot(String id) async {
     if (demoMode) { _demo.deleteVisitSlot(id); return; }
     await _db.collection('visitSlots').doc(id).delete();
-  }
-
-  // ── Permission Requests (권한 신청) ────────────────────────────────────
-  Stream<List<PermissionRequestModel>> streamPermissionRequests() {
-    if (demoMode) return _demo.streamPermissionRequests();
-    return _db.collection('permissionRequests')
-        .orderBy('requestDate', descending: true)
-        .snapshots()
-        .map((s) => s.docs.map(PermissionRequestModel.fromFirestore).toList());
-  }
-
-  Stream<List<PermissionRequestModel>> streamUserPermissionRequests(String userId) {
-    if (demoMode) return _demo.streamUserPermissionRequests(userId);
-    return _db.collection('permissionRequests')
-        .where('userId', isEqualTo: userId)
-        .orderBy('requestDate', descending: true)
-        .snapshots()
-        .map((s) => s.docs.map(PermissionRequestModel.fromFirestore).toList());
-  }
-
-  Future<void> requestPermission(PermissionRequestModel request) async {
-    if (demoMode) { _demo.addPermissionRequest(request); return; }
-    await _db.collection('permissionRequests').doc(request.id).set(request.toMap());
-  }
-
-  // 승인: 신청 종류에 따라 역할/소속팀/사역팀을 반영하고 신청 상태를 approved로 변경.
-  // 관련 문서(users, positions, permissionRequests)를 전부 하나의 Transaction으로
-  // 묶어 원자적으로 처리한다 — 순차적인 update로 나눠서 하면, 뒤쪽 쓰기의 보안
-  // 규칙(isAdmin())이 이미 반영된 앞쪽 쓰기 이후 상태로 평가돼 승인자 본인이
-  // 요청자이기도 한 경우(예: 테스트 계정으로 역할을 스스로 전환) 거부될 수 있다.
-  // 하나의 Transaction으로 묶으면 모든 규칙 평가가 커밋 이전 상태 기준으로
-  // 이뤄지므로 이 경합이 사라진다(WriteBatch가 아니라 Transaction을 쓰는 이유는
-  // _stagePositionChange 주석 참고 — 자리 문서 읽기/쓰기 사이 동시 수정 경합까지
-  // 막기 위함).
-  // executive/midLeader/smallLeader는 "자리"가 있는 종류라 _stagePositionChange로
-  // 전임자 강등까지 함께 처리된다. pastor/ministryTeam은 자리 모델 대상이 아니므로
-  // (목사님은 transferRole 전용, 사역팀은 역할과 독립된 중복 가능 축) 그대로 둔다.
-  Future<void> approvePermissionRequest(PermissionRequestModel request, UserModel requester, {required String performedBy}) async {
-    if (demoMode) {
-      UserModel updated;
-      switch (request.requestType) {
-        case PermissionRequestType.pastor:
-          updated = requester.copyWith(role: UserRole.pastor);
-        case PermissionRequestType.executive:
-        case PermissionRequestType.midLeader:
-        case PermissionRequestType.smallLeader:
-          final newRole = _roleForRequestType(request.requestType);
-          final newDept = request.requestType == PermissionRequestType.executive
-              ? AppTeams.executiveTeam
-              : (request.targetDepartment ?? requester.department);
-          final r = _demo.stagePositionChange(
-            target: requester, newRole: newRole, newDepartment: newDept,
-            newExecutiveTitle: request.targetExecutiveTitle ?? '',
-          );
-          updated = requester.copyWith(
-            role: r.role,
-            department: r.department,
-            executiveTitle: r.executiveTitle,
-            ministryTeam: r.resetMinistry ? '' : null,
-            isMinistryLead: r.resetMinistry ? false : null,
-            bannerAccessGranted: r.resetMinistry ? false : null,
-          );
-        case PermissionRequestType.ministryTeam:
-          updated = requester.copyWith(ministryTeam: request.targetMinistryTeam ?? requester.ministryTeam);
-        default:
-          updated = requester;
-      }
-      _demo.updateUser(updated);
-      _demo.updatePermissionRequestStatus(request.id, 'approved');
-      return;
-    }
-
-    await _db.runTransaction((txn) async {
-      UserModel updated;
-      switch (request.requestType) {
-        case PermissionRequestType.pastor:
-          updated = requester.copyWith(role: UserRole.pastor);
-        case PermissionRequestType.executive:
-        case PermissionRequestType.midLeader:
-        case PermissionRequestType.smallLeader:
-          final newRole = _roleForRequestType(request.requestType);
-          final newDept = request.requestType == PermissionRequestType.executive
-              ? AppTeams.executiveTeam
-              : (request.targetDepartment ?? requester.department);
-          final r = await _stagePositionChange(
-            txn, target: requester, newRole: newRole, newDepartment: newDept,
-            newExecutiveTitle: request.targetExecutiveTitle ?? '', performedBy: performedBy,
-          );
-          updated = requester.copyWith(
-            role: r.role,
-            department: r.department,
-            executiveTitle: r.executiveTitle,
-            ministryTeam: r.resetMinistry ? '' : null,
-            isMinistryLead: r.resetMinistry ? false : null,
-            bannerAccessGranted: r.resetMinistry ? false : null,
-          );
-        case PermissionRequestType.ministryTeam:
-          updated = requester.copyWith(ministryTeam: request.targetMinistryTeam ?? requester.ministryTeam);
-        default:
-          updated = requester;
-      }
-
-      txn.set(_db.collection('users').doc(updated.uid), updated.toMap());
-      final oldDept = requester.department;
-      if (oldDept.isNotEmpty && oldDept != updated.department && updated.department.isNotEmpty) {
-        txn.set(_db.collection('notifications').doc(), _notificationData(
-          userId: updated.uid,
-          title: '소속팀 변경',
-          body: '소속팀이 ${AppTeams.deptLabel(updated.department)}(으)로 변경되었습니다.',
-          type: 'teamAssignment',
-        ));
-      }
-      txn.update(_db.collection('permissionRequests').doc(request.id), {'status': 'approved'});
-      txn.set(_db.collection('notifications').doc(), _notificationData(
-        userId: updated.uid,
-        title: '권한 신청 결과',
-        body: '${request.targetLabel} 권한 신청이 승인되었습니다.',
-        type: 'permissionRequest',
-      ));
-    });
-  }
-
-  String _roleForRequestType(String type) {
-    switch (type) {
-      case PermissionRequestType.executive:
-        return UserRole.executive;
-      case PermissionRequestType.midLeader:
-        return UserRole.midLeader;
-      case PermissionRequestType.smallLeader:
-        return UserRole.smallLeader;
-      default:
-        return UserRole.member;
-    }
-  }
-
-  Future<void> rejectPermissionRequest(String requestId, {required String requesterId, required String targetLabel}) async {
-    await _updatePermissionRequestStatus(requestId, 'rejected', requesterId: requesterId, targetLabel: targetLabel);
-  }
-
-  Future<void> _updatePermissionRequestStatus(String id, String status, {required String requesterId, required String targetLabel}) async {
-    if (demoMode) { _demo.updatePermissionRequestStatus(id, status); return; }
-    await _db.collection('permissionRequests').doc(id).update({'status': status});
-    if (requesterId.isNotEmpty) {
-      await _addNotification(
-        userId: requesterId,
-        title: '권한 신청 결과',
-        body: status == 'approved' ? '$targetLabel 권한 신청이 승인되었습니다.' : '$targetLabel 권한 신청이 거절되었습니다.',
-        type: 'permissionRequest',
-      );
-    }
-  }
-
-  // 승인/거절 등 처리가 끝난 신청 기록만 관리자가 삭제(정리) 가능
-  Future<void> deletePermissionRequest(String id) async {
-    if (demoMode) { _demo.deletePermissionRequest(id); return; }
-    await _db.collection('permissionRequests').doc(id).delete();
   }
 
   // ── New Family Rotation (주차 1~3별 고정 담당 리더) ──────────────────────

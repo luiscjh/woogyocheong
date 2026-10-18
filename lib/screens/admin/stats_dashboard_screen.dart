@@ -6,7 +6,6 @@ import '../../models/user_model.dart';
 import '../../models/attendance_model.dart';
 import '../../models/fee_model.dart';
 import '../../models/visit_model.dart';
-import '../../models/permission_request_model.dart';
 import '../../utils/constants.dart';
 
 // 관리자/임원팀용 청년부 전체 현황 요약 대시보드: 회원/출석/회비/심방 현황을 한눈에 확인
@@ -44,20 +43,13 @@ class StatsDashboardScreen extends StatelessWidget {
                   final fees = feeSnap.data ?? [];
 
                   Widget buildBody(List<VisitModel> visits) {
-                    return StreamBuilder<List<PermissionRequestModel>>(
-                      stream: service.streamPermissionRequests(),
-                      builder: (ctx, reqSnap) {
-                        final permissionRequests = reqSnap.data ?? [];
-                        return _DashboardBody(
-                          members: members,
-                          attendance: attendance,
-                          fees: fees,
-                          visits: visits,
-                          showVisitStats: isPastor,
-                          permissionRequests: permissionRequests,
-                          now: now,
-                        );
-                      },
+                    return _DashboardBody(
+                      members: members,
+                      attendance: attendance,
+                      fees: fees,
+                      visits: visits,
+                      showVisitStats: isPastor,
+                      now: now,
                     );
                   }
 
@@ -82,7 +74,6 @@ class _DashboardBody extends StatelessWidget {
   final List<FeeModel> fees;
   final List<VisitModel> visits;
   final bool showVisitStats;
-  final List<PermissionRequestModel> permissionRequests;
   final DateTime now;
 
   const _DashboardBody({
@@ -91,7 +82,6 @@ class _DashboardBody extends StatelessWidget {
     required this.fees,
     required this.visits,
     required this.showVisitStats,
-    required this.permissionRequests,
     required this.now,
   });
 
@@ -113,8 +103,6 @@ class _DashboardBody extends StatelessWidget {
     for (final v in visits) {
       visitCounts[v.status] = (visitCounts[v.status] ?? 0) + 1;
     }
-    final pendingRequestCount = permissionRequests.where((r) => r.status == 'pending').length;
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -147,14 +135,6 @@ class _DashboardBody extends StatelessWidget {
           const SizedBox(height: 20),
           const _SectionTitle('심방 신청 현황'),
           _VisitStatusCard(counts: visitCounts, total: visits.length),
-        ],
-        if (pendingRequestCount > 0) ...[
-          const SizedBox(height: 20),
-          _PendingActionCard(
-            icon: Icons.verified_user_outlined,
-            label: '처리 대기 중인 권한 신청',
-            count: pendingRequestCount,
-          ),
         ],
       ],
     );
@@ -355,22 +335,3 @@ class _VisitStatusCard extends StatelessWidget {
   }
 }
 
-class _PendingActionCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final int count;
-
-  const _PendingActionCard({required this.icon, required this.label, required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: AppColors.warning.withValues(alpha: 0.08),
-      child: ListTile(
-        leading: Icon(icon, color: AppColors.warning),
-        title: Text(label),
-        trailing: Text('$count건', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.warning)),
-      ),
-    );
-  }
-}
