@@ -6,8 +6,8 @@ import 'package:share_plus/share_plus.dart';
 // 않도록 웹 버전과 동일하게 UTF-8 BOM을 붙임
 Future<void> downloadCsv(String filename, String content) async {
   final bytes = utf8.encode('﻿$content');
-  await Share.shareXFiles(
-    [XFile.fromData(bytes, name: filename, mimeType: 'text/csv')],
+  await SharePlus.instance.share(ShareParams(
+    files: [XFile.fromData(bytes, name: filename, mimeType: 'text/csv')],
     fileNameOverrides: [filename],
-  );
+  ));
 }

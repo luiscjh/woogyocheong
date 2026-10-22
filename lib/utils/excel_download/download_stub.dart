@@ -10,8 +10,8 @@ const _xlsxMimeType = 'application/vnd.openxmlformats-officedocument.spreadsheet
 Future<void> downloadExcelBook(Excel book, String filename) async {
   final bytes = book.save();
   if (bytes == null) return;
-  await Share.shareXFiles(
-    [XFile.fromData(Uint8List.fromList(bytes), name: filename, mimeType: _xlsxMimeType)],
+  await SharePlus.instance.share(ShareParams(
+    files: [XFile.fromData(Uint8List.fromList(bytes), name: filename, mimeType: _xlsxMimeType)],
     fileNameOverrides: [filename],
-  );
+  ));
 }
