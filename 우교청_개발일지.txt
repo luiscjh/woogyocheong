@@ -1198,8 +1198,25 @@
         최신 APK 설치 검증 — 작업 도중 USB 연결이 끊겨 재설치하지
         못함(APK는 빌드 완료, 재연결 후 설치만 하면 됨)
   [ ] firestore.rules 배포 대기(25차 작업) — permissionRequests
-        컬렉션 규칙 제거분. 사용자 승인 후
-        firebase deploy --only firestore:rules 진행할 것
+        컬렉션 규칙 제거분 → 이미 배포돼 있음(26차 작업에서 Rules API로
+        현재 릴리스(2026-10-19 01:01 KST)를 읽어 repo 파일과 동일함을
+        확인). 남아 있는 옛 permissionRequests 문서는 규칙상 아무도 읽을
+        수 없음 — 지울지는 소유자 판단
+  [ ] 권한 범위 소유자 판단 대기(26차 작업 보안 검사 F3) — 소팀장이 SDK로
+        자기 문서에 ministryTeam='콘텐츠팀', isMinistryLead=true를 써서
+        배너 관리 권한을 얻을 수 있고(에뮬레이터 ALLOW), 콘텐츠팀장 분기는
+        role만 고정해 다른 회원의 소속/직책/permissions까지 수정 가능.
+        앱 화면은 관리자만 하도록 막고 있음 — 규칙에서도 강제할지
+        (소팀장 분기에 isMinistryLead/bannerAccessGranted/executiveTitle
+        고정, 콘텐츠팀장 분기는 사역팀 필드만 허용) 결정 필요
+  [ ] iOS 첫 업로드 시 "Validate App"으로 확인(26차 작업) — SPM으로
+        들어온 grpc/absl/openssl_grpc/grpcpp/FirebaseFirestoreInternal
+        stub 프레임워크의 MinimumOSVersion이 100.0(Google의 Xcode 15.3
+        업로드 오류 대응값, 런타임 미로딩). 차단 요소는 아닌 것으로
+        판단했으나 실제 검증은 Apple 계정이 있어야 가능. 거절되면
+        FlutterFire 업그레이드 → 그래도 안 되면 CocoaPods 전환 순.
+        stub을 지우거나 plist를 고치는 우회는 금지(개인정보 매니페스트
+        누락/서명 손상)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [14차 작업] 2026-09-26
@@ -2067,5 +2084,87 @@
   - 수정 후 flutter build apk --release, flutter build web --release,
     iOS 시뮬레이터 재기동 모두 성공 확인. 안드로이드 태블릿은 작업
     도중 USB 연결이 끊겨 수정된 APK 재설치는 다음 세션으로 이월
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[26차 작업] 2026-10-23
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 스토어 등록 가능 여부 재점검(오케스트레이터, 4라운드) + 지적 사항 수정
+  - 배경: 22~25차 작업(자리 모델, 임원팀 직책, 권한 신청 제거, 엑셀
+    업로드) 반영 후 "처음에 부탁했던 내용 다시 진행해줘"라는 요청 —
+    21차 작업과 같은 파이프라인(Reality Checker로 앱스토어/플레이스토어
+    등록 가능 여부 판정 + 코드가 바뀌었으면 보안 감사, 실패 시 수정 후
+    재검사). 각 역할의 권한 범위(firestore.rules)는 건드리지 않는 조건
+  - 최종 결과(4차): Google Play / App Store 모두 "코드 측 차단 없음",
+    보안 감사 PASS. 1~3차는 아래 항목들로 실패 → 수정 → 재검사.
+    3회 실패 시점에 사용자에게 확인받고 4차 진행
+  - 남은 것은 모두 소유자 작업: Sign in with Apple(Apple Developer
+    Program 가입 후, iOS 제출 전 필수), 개인정보처리방침 [대괄호] 값
+    채우기 + Hosting 재배포, 스토어 콘솔 설정, F3 규칙 판단(TODO 참고)
+
+■ 자리(positions) 정합성 수정 — lib/services/firestore_service.dart
+  - _stagePositionChange: 단일석에 새 사람을 앉힐 때 positions의
+    holderUids 첫 사람을 무조건 강등하던 것을, 트랜잭션 안에서 그 사람의
+    users 문서를 먼저 읽고(읽기는 모두 쓰기 전) "문서가 있고 지금도 그
+    자리에 해당하는 role/소속/직책일 때만" 강등하도록 변경. 그렇지
+    않으면 holderUids에서만 빠짐
+    · 고친 문제 1: 목사님이 소팀장에게 역할 양도(transferRole)하면
+      positions에 그 사람이 남아 있어, 나중에 그 소팀 자리를 채울 때
+      새 목사님이 조용히 팀원으로 강등됨
+    · 고친 문제 2: 탈퇴/삭제된 회원 uid가 남아 있으면 없는 문서에
+      update → NOT_FOUND로 청년부 명단 저장 트랜잭션 전체가 실패
+  - applyPositionAssignments: 한 배치에 같은 users 문서 update가 여러
+    번 쌓여 마지막 것만 남던 문제(엑셀로 A-2→A-1 이동, 맞교환 시
+    순서에 따라 강등돼 버림) — uid별 최종 상태를 Map으로 모은 뒤
+    (강등 먼저, 승급이 덮어씀) uid당 update 1회로 변경
+
+■ 리더 명단 엑셀 업로드 검증 강화 — lib/utils/leader_roster_excel.dart,
+  lib/screens/admin/position_migration_screen.dart
+  - 1MB 초과 파일은 풀기 전에, 200행 초과 시트는 거부(압축 폭탄 방지)
+  - 전체 행을 먼저 읽어 판단(행 순서와 무관하게 결과가 같도록)
+    · 같은 자리ID가 여러 행 → 그 자리의 행 모두 오류
+    · 한 사람이 여러 자리의 "변경 후"에 등장(변경 없는 행 포함) →
+      그 사람이 있는 행 모두 오류
+    · 내려받은 양식에서 지운 자리 행 → "행이 없습니다" 오류
+    · 관리자·목사님 계정은 엑셀로 지정 불가(이메일 오타/동명이인 사고 방지)
+    · 같은 칸의 중복 이메일은 하나로 합침
+  - 오류가 하나라도 있으면 "반영" 버튼 비활성화 + 안내 문구, 반영
+    함수 안에서도 한 번 더 막음. 반영 실패 시 "변경된 내용 없음"
+    스낵바(기존엔 안내 없이 스피너만 풀림)
+  - 변경 예정 카드에 이름과 함께 이메일 표시
+  - test/leader_roster_excel_test.dart 신규(8건) — 행 순서 뒤집기,
+    맞교환, 같은 자리ID 중복, 지운 행, 목사님 계정 거부, 같은 칸 중복
+    이메일, 1MB 초과. 기존 placeholder 테스트 포함 9건 모두 통과
+
+■ 개인정보처리방침/탈퇴 안내 문구를 현재 앱에 맞춤 — web/privacy.html,
+  lib/screens/profile/profile_screen.dart
+  - 제거된 "권한 신청 내역"을 수집·열람 항목에서 빼고, 보유 항목에만
+    "종료된 권한 신청 기능의 과거 신청 기록"으로 남김
+  - 회원 정보에 임원팀 직책·리더 자리 배정 추가, 열람 범위에 리더 자리
+    배정 추가, 보유 항목에 리더 자리 배정 기록(회원 식별자) 추가
+  - 내보내기 고지 추가: 관리자는 리더 명단(이름·이메일) 엑셀, 임원
+    이상은 출석부(이름·소속·출석 여부) CSV
+  - Hosting에는 아직 배포하지 않음([대괄호] 값과 함께 배포 예정)
+
+■ iOS 최소 지원 버전 15.0 유지 — ios/Runner.xcodeproj/project.pbxproj
+  - Xcode 27이 프로젝트를 자동 업그레이드하며 타깃별로
+    IPHONEOS_DEPLOYMENT_TARGET = $(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)
+    를 넣어, 실제 빌드의 MinimumOSVersion이 17.0으로 조용히 올라가
+    있었음(iPhone 6s~X 설치 불가). 사용자 결정으로 7곳 모두 15.0으로
+    고정. release 빌드에서 MinimumOSVersion/minos 15.0 확인
+  - 나머지 Xcode 자동 변경(objectVersion 60, LastUpgradeCheck 2700,
+    경고 플래그, Info.plist 줄 정리 — 내용 동일)은 그대로 커밋
+
+■ 기타
+  - share_plus의 deprecated Share.shareXFiles를
+    SharePlus.instance.share(ShareParams(...))로 교체(엑셀/CSV 공유)
+  - 검증: flutter analyze 이슈 없음, flutter test 9건 통과, flutter
+    build appbundle --release(업로드 키 서명), flutter build ios
+    --release --no-codesign 성공. 보안 감사는 Firestore 에뮬레이터로
+    규칙 통과 여부까지 재현
+  - 보안 감사 비차단 제안(미반영): 엑셀 헤더 행 검증(“변경 후” 열을
+    지우면 전원 공석 변경이 오류 없이 미리보기에 뜸 — 반영은 관리자가
+    눌러야 함), 자리ID만 비운 행은 안내 없이 무시됨, demo_data.dart의
+    데모 전용 로직은 실서버의 uid별 합치기와 다름
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
