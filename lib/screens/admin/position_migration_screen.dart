@@ -81,7 +81,8 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
 
   Future<void> _applyExcelChanges() async {
     final result = _parseResult;
-    if (result == null || result.changes.isEmpty) return;
+    // 버튼 비활성화와 별개로, 처리하지 못한 행이 있으면 여기서도 막는다
+    if (result == null || result.changes.isEmpty || result.errors.isNotEmpty) return;
     setState(() => _applying = true);
     try {
       final performedBy = context.read<AuthProvider>().currentUser!.uid;
@@ -102,6 +103,12 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
         SnackBar(content: Text('엑셀 내용대로 ${assignments.length}개 자리를 변경했습니다.'), backgroundColor: AppColors.success),
       );
       _reload();
+    } catch (e) {
+      // 한 배치라 실패하면 아무것도 바뀌지 않음 — 다시 시도할 수 있게 안내만 한다
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('반영하지 못했습니다(변경된 내용 없음): $e'), backgroundColor: AppColors.error),
+      );
     } finally {
       if (mounted) setState(() => _applying = false);
     }
@@ -286,12 +293,19 @@ class _ExcelPreviewSection extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text('변경 예정 ${result.changes.length}건', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+              // 처리하지 못한 행이 하나라도 있으면 일부만 반영되는 일이 없도록
+              // 엑셀을 고쳐 다시 올릴 때까지 반영을 막는다
               ElevatedButton(
-                onPressed: applying ? null : onApply,
+                onPressed: applying || result.errors.isNotEmpty ? null : onApply,
                 child: const Text('반영'),
               ),
             ],
           ),
+          if (result.errors.isNotEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text('처리하지 못한 행을 엑셀에서 고친 뒤 다시 올려야 반영할 수 있습니다.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ),
           const SizedBox(height: 8),
           for (final c in result.changes) _ChangeCard(change: c),
         ] else if (result.errors.isEmpty)
@@ -307,8 +321,9 @@ class _ChangeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final before = change.before.isEmpty ? '공석' : change.before.map((u) => u.name).join(', ');
-    final after = change.after.isEmpty ? '공석' : change.after.map((u) => u.name).join(', ');
+    // 동명이인·이메일 오타를 알아볼 수 있도록 이메일도 함께 보여준다
+    final before = change.before.isEmpty ? '공석' : change.before.map((u) => '${u.name}(${u.email})').join(', ');
+    final after = change.after.isEmpty ? '공석' : change.after.map((u) => '${u.name}(${u.email})').join(', ');
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
       child: ListTile(

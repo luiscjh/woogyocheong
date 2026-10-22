@@ -1,6 +1,7 @@
 import 'package:excel/excel.dart' hide Border;
 import '../models/position_model.dart';
 import '../models/user_model.dart';
+import 'constants.dart';
 
 // 리더 명단을 엑셀로 내보내고(현재 26개 자리 전수), 관리자가 "변경 후" 칸만
 // 고쳐서 다시 올리면 실제로 바뀐 자리만 찾아 한 번에 반영할 수 있게 한다.
@@ -9,6 +10,8 @@ import '../models/user_model.dart';
 // 비교해서 실제로 바뀐 자리만 반영 대상으로 삼는다.
 
 const _sheetName = '리더명단';
+const _maxBytes = 1024 * 1024;
+const _maxRows = 200;
 const _headerRow = ['자리ID(수정 금지)', '자리', '변경 전', '변경 후(이메일, 다인석은 ; 로 구분)'];
 
 String _holdersLabel(List<UserModel> holders) =>
@@ -61,6 +64,11 @@ LeaderRosterParseResult parseLeaderRosterExcel(
   required List<PositionMigrationEntry> currentEntries,
   required Map<String, UserModel> usersByEmail,
 }) {
+  // 리더 명단은 수십 행짜리 작은 파일이라, 이보다 크면 잘못된 파일(또는 압축
+  // 폭탄)로 보고 메모리에 풀기 전에 거부한다
+  if (bytes.length > _maxBytes) {
+    return const LeaderRosterParseResult(changes: [], errors: ['파일이 너무 큽니다(1MB 초과). 내려받은 리더 명단 엑셀을 사용해 주세요.']);
+  }
   final Excel book;
   try {
     book = Excel.decodeBytes(bytes);
@@ -77,21 +85,69 @@ LeaderRosterParseResult parseLeaderRosterExcel(
   final errors = <String>[];
   final changes = <LeaderRosterChange>[];
 
+  if (sheet.maxRows > _maxRows) {
+    return const LeaderRosterParseResult(changes: [], errors: ['행이 너무 많습니다($_maxRows행 초과). 내려받은 리더 명단 엑셀을 사용해 주세요.']);
+  }
+
+  // 행마다 (자리ID, "변경 후" 이메일 목록)을 먼저 뽑아 둔다
+  final rows = <({String positionId, List<String> emails})>[];
   for (final row in sheet.rows.skip(1)) {
     if (row.isEmpty) continue;
-    final positionId = _cellText(row.isNotEmpty ? row[0]?.value : null).trim();
+    final positionId = _cellText(row[0]?.value).trim();
     if (positionId.isEmpty) continue;
+    final afterText = _cellText(row.length > 3 ? row[3]?.value : null).trim();
+    final emails = afterText.isEmpty
+        ? <String>[]
+        : afterText.split(RegExp(r'[;,]')).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet().toList();
+    rows.add((positionId: positionId, emails: emails));
+  }
 
+  // 같은 자리ID가 여러 행에 있으면 어느 행을 따를지 모호하다(같은 positions
+  // 문서를 두 번 쓰면 마지막 행만 남고, 사람 승급은 두 행 모두 적용돼 어긋남).
+  // 그 자리의 행은 모두 오류로 빼고 아래 중복 사람 집계에서도 제외한다
+  final idCounts = <String, int>{};
+  for (final r in rows) {
+    idCounts[r.positionId] = (idCounts[r.positionId] ?? 0) + 1;
+  }
+  final duplicatedIds = {for (final e in idCounts.entries) if (e.value > 1) e.key};
+  for (final id in duplicatedIds) {
+    final label = currentById[id]?.def.label ?? id;
+    errors.add('$label: 같은 자리ID가 ${idCounts[id]}개 행에 있습니다. 한 자리는 한 행에만 적어 주세요.');
+  }
+
+  // 내려받은 양식의 행을 지우면 그 자리의 현재 담당자가 positions에 그대로
+  // 남은 채 다른 자리로 옮겨질 수 있으므로, 빠진 자리가 있으면 오류로 처리
+  final presentIds = idCounts.keys.toSet();
+  for (final e in currentEntries) {
+    if (!presentIds.contains(e.def.id)) {
+      errors.add('${e.def.label}: 행이 없습니다. 내려받은 양식의 행은 지우지 말고 "변경 후" 칸만 고쳐 주세요.');
+    }
+  }
+
+  // 한 사람이 여러 자리의 "변경 후"에 동시에 들어가면(변경 없는 행 포함) 어느
+  // 자리로 갈지 모호하다. 먼저 전체 행을 훑어 uid별 등장 자리를 모은 뒤, 그
+  // 사람이 들어 있는 행을 "모두" 오류로 뺀다 — 첫 행만 반영되고 나머지만
+  // 빠지면 결과가 행 순서에 따라 달라지기 때문
+  final placesByUid = <String, List<String>>{};
+  for (final r in rows) {
+    if (duplicatedIds.contains(r.positionId)) continue;
+    final label = currentById[r.positionId]?.def.label;
+    if (label == null) continue;
+    for (final email in r.emails) {
+      final u = usersByEmail[email];
+      if (u != null) (placesByUid[u.uid] ??= []).add(label);
+    }
+  }
+
+  for (final r in rows) {
+    final positionId = r.positionId;
+    if (duplicatedIds.contains(positionId)) continue; // 위에서 오류로 처리함
     final entry = currentById[positionId];
     if (entry == null) {
       errors.add('알 수 없는 자리ID: $positionId');
       continue;
     }
-
-    final afterText = _cellText(row.length > 3 ? row[3]?.value : null).trim();
-    final afterEmails = afterText.isEmpty
-        ? <String>[]
-        : afterText.split(RegExp(r'[;,]')).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toList();
+    final afterEmails = r.emails;
 
     final afterUsers = <UserModel>[];
     var rowHasError = false;
@@ -99,6 +155,20 @@ LeaderRosterParseResult parseLeaderRosterExcel(
       final u = usersByEmail[email];
       if (u == null) {
         errors.add('${entry.def.label}: 일치하는 회원 없음 ($email)');
+        rowHasError = true;
+        continue;
+      }
+      // 관리자·목사님은 리더 자리로 옮기면 사실상 강등되므로 엑셀로는 지정하지
+      // 않는다(이메일 오타나 동명이인으로 인한 사고 방지) — 필요하면 청년부
+      // 명단 화면에서 직접 수정
+      if (u.role == UserRole.admin || u.role == UserRole.pastor) {
+        errors.add('${entry.def.label}: ${UserRole.labels[u.role]} 계정은 엑셀로 자리에 지정할 수 없습니다 ($email)');
+        rowHasError = true;
+        continue;
+      }
+      final places = placesByUid[u.uid]!;
+      if (places.length > 1) {
+        errors.add('${entry.def.label}: ${u.name}($email)님이 ${places.join(', ')} 자리에 함께 들어 있습니다. 한 사람은 한 자리에만 적어 주세요.');
         rowHasError = true;
         continue;
       }
