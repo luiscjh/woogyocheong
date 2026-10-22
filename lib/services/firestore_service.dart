@@ -190,6 +190,21 @@ class FirestoreService {
     // 모든 읽기를 먼저 수행(Firestore 트랜잭션 제약: 읽기는 쓰기보다 먼저)
     final oldSnap = oldPositionId != null ? await txn.get(_db.collection('positions').doc(oldPositionId)) : null;
     final newSnap = newPositionId != null ? await txn.get(_db.collection('positions').doc(newPositionId)) : null;
+    // 단일석 전임자 users 문서도 쓰기 전에 읽어 둔다 — positions의 holderUids는
+    // 역할 양도(transferRole)·탈퇴·직접 수정 등으로 실제와 어긋날 수 있어서,
+    // 전임자가 "지금도 이 자리에 해당하는 role/소속"일 때만 강등해야 엉뚱한
+    // 사람(예: 양도받은 목사님)을 팀원으로 만들거나, 이미 지워진 문서에
+    // update를 해서 트랜잭션 전체가 실패(NOT_FOUND)하는 일을 막을 수 있다
+    final newDef = newPositionId != null ? PositionRegistry.byId(newPositionId)! : null;
+    final newSnapHolders = List<String>.from(newSnap?.data()?['holderUids'] ?? []);
+    final displacedUid = newDef != null && newDef.capacity == 1 && newSnapHolders.isNotEmpty && newSnapHolders.first != target.uid
+        ? newSnapHolders.first
+        : null;
+    final displacedSnap = displacedUid != null ? await txn.get(_db.collection('users').doc(displacedUid)) : null;
+    final displacedStillHolds = displacedSnap != null && displacedSnap.exists && (() {
+      final u = UserModel.fromFirestore(displacedSnap);
+      return PositionRegistry.idFor(role: u.role, department: u.department, executiveTitle: u.executiveTitle) == newPositionId;
+    })();
 
     // 마이그레이션 전이라면 positions 문서가 아직 없을 수 있어 update() 대신
     // 항상 현재 상태를 읽고 전체 필드를 다시 쓰는 set()을 쓴다(없으면 새로 생성됨)
@@ -208,12 +223,13 @@ class FirestoreService {
 
     var resetMinistry = false;
     if (newPositionId != null) {
-      final def = PositionRegistry.byId(newPositionId)!;
-      final currentHolders = List<String>.from(newSnap?.data()?['holderUids'] ?? []);
+      final def = newDef!;
+      final currentHolders = newSnapHolders;
       // 단일석(capacity==1)에 이미 다른 사람이 있으면 전임자를 팀원으로 강등
-      // (role이 더 이상 executive가 아니게 되므로 executiveTitle도 함께 비움)
-      if (def.capacity == 1 && currentHolders.isNotEmpty && currentHolders.first != target.uid) {
-        txn.update(_db.collection('users').doc(currentHolders.first), {'role': UserRole.member, 'permissions': [], 'executiveTitle': ''});
+      // (role이 더 이상 executive가 아니게 되므로 executiveTitle도 함께 비움).
+      // 전임자가 이미 다른 역할/소속이거나 탈퇴했으면 holderUids에서만 빠진다
+      if (displacedStillHolds) {
+        txn.update(_db.collection('users').doc(displacedUid), {'role': UserRole.member, 'permissions': [], 'executiveTitle': ''});
       }
       final newHolders = def.capacity == 1 ? [target.uid] : {...currentHolders, target.uid}.toList();
       txn.set(_db.collection('positions').doc(newPositionId), {
@@ -240,6 +256,27 @@ class FirestoreService {
       return;
     }
     final batch = _db.batch();
+    // 한 배치에 같은 users 문서 update가 여러 번 쌓이면 마지막 것만 남아 결과가
+    // 자리 순서에 따라 달라진다(예: A-2 → A-1 이동인데 A-2 강등이 나중에 적용돼
+    // 팀원이 됨). 그래서 uid별 최종 상태를 먼저 모으고 — 승급이 강등보다 우선 —
+    // uid마다 update를 한 번만 한다
+    final userUpdates = <String, Map<String, dynamic>>{};
+    for (final a in assignments) {
+      for (final uid in a.previousHolderUids.where((u) => !a.holderUids.contains(u))) {
+        userUpdates.putIfAbsent(uid, () => {'role': UserRole.member, 'permissions': [], 'executiveTitle': ''});
+      }
+    }
+    for (final a in assignments) {
+      for (final uid in a.holderUids.where((u) => !a.previousHolderUids.contains(u))) {
+        final update = <String, dynamic>{'role': a.role, 'department': a.department, 'executiveTitle': a.executiveTitle};
+        if (a.role == UserRole.executive) {
+          update['ministryTeam'] = '';
+          update['isMinistryLead'] = false;
+          update['bannerAccessGranted'] = false;
+        }
+        userUpdates[uid] = update;
+      }
+    }
     for (final a in assignments) {
       batch.set(_db.collection('positions').doc(a.positionId), {
         'role': a.role,
@@ -249,19 +286,8 @@ class FirestoreService {
         'updatedAt': Timestamp.now(),
         'updatedBy': performedBy,
       });
-      for (final uid in a.previousHolderUids.where((u) => !a.holderUids.contains(u))) {
-        batch.update(_db.collection('users').doc(uid), {'role': UserRole.member, 'permissions': [], 'executiveTitle': ''});
-      }
-      for (final uid in a.holderUids.where((u) => !a.previousHolderUids.contains(u))) {
-        final update = <String, dynamic>{'role': a.role, 'department': a.department, 'executiveTitle': a.executiveTitle};
-        if (a.role == UserRole.executive) {
-          update['ministryTeam'] = '';
-          update['isMinistryLead'] = false;
-          update['bannerAccessGranted'] = false;
-        }
-        batch.update(_db.collection('users').doc(uid), update);
-      }
     }
+    userUpdates.forEach((uid, update) => batch.update(_db.collection('users').doc(uid), update));
     await batch.commit();
   }
 
