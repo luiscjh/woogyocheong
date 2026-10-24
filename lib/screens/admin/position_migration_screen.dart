@@ -28,6 +28,8 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
   bool _downloading = false;
   bool _uploading = false;
   LeaderRosterParseResult? _parseResult;
+  List<int>? _uploadedBytes;
+  String? _uploadedFileName;
 
   @override
   void initState() {
@@ -39,6 +41,8 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
     setState(() {
       _future = _service.previewPositionMigration();
       _parseResult = null;
+      _uploadedBytes = null;
+      _uploadedFileName = null;
     });
   }
 
@@ -63,7 +67,11 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
       final usersByEmail = await _service.fetchUsersByEmail();
       final result = parseLeaderRosterExcel(bytes, currentEntries: currentEntries, usersByEmail: usersByEmail);
       if (!mounted) return;
-      setState(() => _parseResult = result);
+      setState(() {
+        _parseResult = result;
+        _uploadedBytes = bytes;
+        _uploadedFileName = file.name;
+      });
       if (result.changes.isEmpty && result.errors.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('엑셀 내용이 현재 상태와 같아 변경할 내용이 없습니다.')),
@@ -98,6 +106,24 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
               ))
           .toList();
       await _service.applyPositionAssignments(assignments, performedBy: performedBy);
+      // 실제로 반영된 엑셀 원본만 30일 보관(저장 실패해도 이미 끝난 반영
+      // 자체는 되돌리지 않고, 보관만 못 됐다고 별도로 안내)
+      final bytes = _uploadedBytes;
+      if (bytes != null) {
+        try {
+          await _service.saveLeaderRosterUpload(
+            fileName: _uploadedFileName ?? '리더명단.xlsx',
+            fileBytes: bytes,
+            uploadedBy: performedBy,
+          );
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('반영은 완료됐지만 엑셀 원본 보관에는 실패했습니다.'), backgroundColor: AppColors.error),
+            );
+          }
+        }
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('엑셀 내용대로 ${assignments.length}개 자리를 변경했습니다.'), backgroundColor: AppColors.success),

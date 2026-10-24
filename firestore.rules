@@ -70,6 +70,16 @@ service cloud.firestore {
       return isRegistered() && myData().ministryTeam == '콘텐츠팀' && myData().isMinistryLead == true;
     }
 
+    // ── users 쓰기 헬퍼 ────────────────────────────────────────────────
+    // 필드가 없는 예전 문서도 있으므로 get(키, 기본값)으로 비교한다
+    function unchanged(key, defaultValue) {
+      return request.resource.data.get(key, defaultValue) == resource.data.get(key, defaultValue);
+    }
+    // 불리언 권한 플래그는 그대로 두거나 false로 내리는 것(해제)만 허용
+    function notRaised(key) {
+      return unchanged(key, false) || request.resource.data.get(key, false) == false;
+    }
+
     // ── users ───────────────────────────────────────────────────────
     match /users/{uid} {
       allow read: if isSignedIn();
@@ -84,9 +94,19 @@ service cloud.firestore {
         (isSmallLeader() && request.resource.data.role == 'member') ||
         (isOwner(uid) && request.resource.data.role == 'member' && request.resource.data.department == '');
       allow update: if
-        // 일반 정보(이름/연락처/소속팀 등) 수정: 소팀장 이상, role·permissions는 그대로
+        // 일반 정보(이름/연락처/소속팀/사역팀 등) 수정: 소팀장 이상, role·permissions는 그대로.
+        // 임원팀 직책·사역팀장·배너 권한 위임은 앱에서 관리자(배너 위임은 콘텐츠팀
+        // 팀장도)만 지정하므로 여기서는 올릴 수 없고 해제만 가능 — 그러지 않으면
+        // 소팀장이 SDK로 자기 문서에 콘텐츠팀장을 써서 배너 권한을 얻을 수 있었음
+        // (26차 작업 보안 점검 F3). 사역팀을 옮길 때도 팀장/위임 플래그를 들고
+        // 갈 수 없게 함(앱도 사역팀 해제 시 두 플래그를 같이 내림)
         (isSmallLeader() && request.resource.data.role == resource.data.role &&
-         request.resource.data.permissions == resource.data.permissions) ||
+         request.resource.data.permissions == resource.data.permissions &&
+         unchanged('executiveTitle', '') &&
+         notRaised('isMinistryLead') && notRaised('bannerAccessGranted') &&
+         (unchanged('ministryTeam', '') ||
+          (request.resource.data.get('isMinistryLead', false) == false &&
+           request.resource.data.get('bannerAccessGranted', false) == false))) ||
         // role 변경(승급/강등)은 관리자만 — 역할 양도(transferRole)도 목사님만
         // 가능하므로 여기 isAdmin()으로 이미 커버됨(별도 예외 불필요)
         isAdmin() ||
@@ -94,10 +114,25 @@ service cloud.firestore {
         (isTestAccount() && isOwner(uid)) ||
         // 신규 가입 온보딩: 방금 만든 본인 문서(department가 비어있던 상태)에 소속팀 등
         // 정보를 처음 채우는 것만 허용, role은 member로 유지
+        // (온보딩 화면은 이름·소속팀·생년월일·기수만 채움 — 권한 관련 필드는 그대로)
         (isOwner(uid) && resource.data.role == 'member' && request.resource.data.role == 'member' &&
-         resource.data.department == '' && request.resource.data.department != '') ||
-        // 콘텐츠팀 팀장이 팀원의 사역팀 소속/배너 권한 위임을 관리 (role은 못 바꿈)
-        (isContentTeamLead() && request.resource.data.role == resource.data.role);
+         resource.data.department == '' && request.resource.data.department != '' &&
+         unchanged('permissions', []) && unchanged('executiveTitle', '') && unchanged('ministryTeam', '') &&
+         unchanged('isMinistryLead', false) && unchanged('bannerAccessGranted', false)) ||
+        // 콘텐츠팀 팀장이 팀원의 사역팀 소속 해제/배너 권한 위임을 관리 — 콘텐츠팀
+        // 소속 회원의 사역팀 관련 필드만 바꿀 수 있다(이전에는 role만 고정돼 있어
+        // 아무 회원의 소속팀·직책·permissions까지 수정 가능했음, F3). 앱은 문서
+        // 전체를 update하므로 예전 문서에 없던 선택 필드가 기본값으로 새로 써지는
+        // 경우는 허용한다
+        (isContentTeamLead() &&
+         resource.data.get('ministryTeam', '') == '콘텐츠팀' &&
+         request.resource.data.get('ministryTeam', '') in ['콘텐츠팀', ''] &&
+         notRaised('isMinistryLead') &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'ministryTeam', 'isMinistryLead', 'bannerAccessGranted',
+           'permissions', 'executiveTitle', 'birthDate', 'cohort', 'profileImageUrl', 'newFamilyGraduatedTo']) &&
+         unchanged('permissions', []) && unchanged('executiveTitle', '') && unchanged('birthDate', null) &&
+         unchanged('cohort', null) && unchanged('profileImageUrl', null) && unchanged('newFamilyGraduatedTo', null));
       // 본인 문서 삭제는 회원 탈퇴(스토어 정책상 필수) 용도 — 앱은 목사님 본인 탈퇴를 UI에서
       // 막고 먼저 역할 양도를 안내함
       allow delete: if isAdmin() ||
@@ -115,6 +150,13 @@ service cloud.firestore {
     match /positions/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin() && positionCapacityOk();
+    }
+
+    // ── leaderRosterUploads: 리더 명단 엑셀 업로드 시 원본 파일을 30일간
+    // 보관(Firestore TTL로 expiresAt 지난 문서 자동 삭제, Storage는 Spark
+    // 요금제라 미사용) — 관리자만 접근
+    match /leaderRosterUploads/{id} {
+      allow read, create, delete: if isAdmin();
     }
 
     // ── attendance / fees: 본인 기록은 스스로 기록, 그 외는 소팀장 이상 ──

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../models/attendance_model.dart';
@@ -321,6 +322,27 @@ class FirestoreService {
       for (final u in users)
         if (u.email.toLowerCase() != 'testing@church.com') u.email.trim().toLowerCase(): u,
     };
+  }
+
+  // 실제로 반영("반영" 버튼)된 리더 명단 엑셀 원본을 30일간만 보관한다.
+  // Storage는 Spark 요금제라 쓸 수 없어 파일을 base64로 인코딩해 Firestore
+  // 문서에 직접 담고, expiresAt에 Firestore TTL 정책을 걸어 기간이 지나면
+  // 자동 삭제되게 한다(TTL 정책 자체는 Firebase 콘솔/gcloud에서 한 번
+  // 설정해야 하며 앱 코드로는 설정할 수 없음)
+  Future<void> saveLeaderRosterUpload({
+    required String fileName,
+    required List<int> fileBytes,
+    required String uploadedBy,
+  }) async {
+    if (demoMode) return;
+    final now = DateTime.now();
+    await _db.collection('leaderRosterUploads').add({
+      'fileName': fileName,
+      'fileBase64': base64Encode(fileBytes),
+      'uploadedAt': Timestamp.fromDate(now),
+      'uploadedBy': uploadedBy,
+      'expiresAt': Timestamp.fromDate(now.add(const Duration(days: 30))),
+    });
   }
 
   // ── Attendance ────────────────────────────────────────────────────────
