@@ -56,6 +56,34 @@ class LeaderRosterParseResult {
   const LeaderRosterParseResult({required this.changes, required this.errors});
 }
 
+// 미리보기용 사람별 영향 요약. 실제 반영(applyPositionAssignments)과 같은
+// 기준으로 계산한다 — 어떤 자리에서 빠져도 다른 자리에 새로 들어가면 강등이
+// 아니라 이동이다(승급이 강등보다 우선)
+class LeaderRosterPreviewSummary {
+  final int seatCount;
+  final Set<String> assigned; // 자리가 없다가 새로 맡는 사람
+  final Set<String> moved; // 한 자리에서 빠지고 다른 자리에 들어가는 사람
+  final Set<String> demoted; // 자리에서 빠지고 어디에도 들어가지 않아 팀원이 되는 사람
+  const LeaderRosterPreviewSummary({required this.seatCount, required this.assigned, required this.moved, required this.demoted});
+
+  factory LeaderRosterPreviewSummary.of(LeaderRosterParseResult result) {
+    final removed = <String>{};
+    final added = <String>{};
+    for (final c in result.changes) {
+      final beforeIds = c.before.map((u) => u.uid).toSet();
+      final afterIds = c.after.map((u) => u.uid).toSet();
+      removed.addAll(beforeIds.difference(afterIds));
+      added.addAll(afterIds.difference(beforeIds));
+    }
+    return LeaderRosterPreviewSummary(
+      seatCount: result.changes.length,
+      assigned: added.difference(removed),
+      moved: added.intersection(removed),
+      demoted: removed.difference(added),
+    );
+  }
+}
+
 // 업로드된 엑셀 바이트를 파싱해, currentEntries(방금 다시 스캔한 최신 상태)와
 // 달라진 자리만 changes로 뽑는다. usersByEmail은 "변경 후" 칸의 이메일을 실제
 // 회원으로 찾기 위한 색인(FirestoreService.fetchUsersByEmail 결과).

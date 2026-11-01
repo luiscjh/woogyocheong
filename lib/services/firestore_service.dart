@@ -248,9 +248,9 @@ class FirestoreService {
   }
 
   // 여러 자리를 한 번에(한 WriteBatch) 갱신. previousHolderUids와 holderUids를
-  // 비교해 빠진 사람은 강등, 새로 추가된 사람은 승급시킨다. 자리 마이그레이션의
-  // 충돌 해결(자리 1개씩 호출)과 향후 2단계(일괄 발령, 여러 개를 한 번에)에서
-  // 그대로 재사용할 수 있도록 범용으로 작성함
+  // 비교해 빠진 사람은 강등, 새로 추가된 사람은 승급시킨다. 리더 명단 엑셀
+  // 업로드 반영과 향후 2단계(일괄 발령)에서 그대로 재사용할 수 있도록 범용으로
+  // 작성함
   Future<void> applyPositionAssignments(List<PositionAssignment> assignments, {required String performedBy}) async {
     if (demoMode) {
       for (final a in assignments) { _demo.applyPositionAssignment(a, performedBy: performedBy); }

@@ -92,6 +92,21 @@ void main() {
     expect(r.errors, contains(contains('행이 없습니다')));
   });
 
+  test('미리보기 요약: 맞교환은 둘 다 이동, 강등 없음', () {
+    final s = LeaderRosterPreviewSummary.of(parse(upload({seatA.id: y.email, seatB.id: x.email})));
+    expect(s.seatCount, 2);
+    expect(s.moved, {'x', 'y'});
+    expect(s.assigned, isEmpty);
+    expect(s.demoted, isEmpty);
+  });
+
+  test('미리보기 요약: 새 사람 지정과 기존 담당자 강등', () {
+    final s = LeaderRosterPreviewSummary.of(parse(upload({seatA.id: m.email})));
+    expect(s.assigned, {'m'});
+    expect(s.demoted, {'x'});
+    expect(s.moved, isEmpty);
+  });
+
   test('목사님 계정은 엑셀로 자리에 지정할 수 없다', () {
     final r = parse(upload({seatA.id: pastor.email}));
     expect(r.changes, isEmpty);

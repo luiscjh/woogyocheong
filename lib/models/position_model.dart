@@ -154,9 +154,9 @@ class PositionModel {
 
 // 자리 하나에 대한 "최종 holder 목록"을 지정하는 배치 입력 단위.
 // previousHolderUids와 holderUids를 비교해 빠진 사람은 member로 강등, 새로
-// 추가된 사람은 role/department를 자리 값으로 승급시킨다. 지금은 마이그레이션
-// 충돌 해결(자리 1개씩)에만 쓰지만, 2단계(여러 자리 일괄 발령)에서 리스트에
-// 여러 항목을 담아 그대로 재사용할 수 있도록 범용으로 설계함
+// 추가된 사람은 role/department를 자리 값으로 승급시킨다. 지금은 리더 명단
+// 엑셀 업로드 반영에 쓰고, 2단계(여러 자리 일괄 발령)에서도 리스트에 여러
+// 항목을 담아 그대로 재사용할 수 있도록 범용으로 설계함
 class PositionAssignment {
   final String positionId;
   final String role;

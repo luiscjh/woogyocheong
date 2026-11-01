@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/position_model.dart';
+import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/constants.dart';
@@ -10,10 +11,9 @@ import '../../utils/leader_roster_excel.dart';
 
 // 관리자 전용 리더 명단 정비 화면. 주된 방법은 엑셀 업로드 — 현재 명단을
 // 엑셀로 내려받아 "변경 후" 칸만 고쳐서 다시 올리면, 실제로 바뀐 자리만
-// 찾아 한 번에 반영한다(applyPositionAssignments 재사용). 그 아래에는
-// 기존 회원 데이터(role/department)를 스캔해 자리와 자동으로 맞춰보는
-// 보조 도구를 그대로 둔다(최초 1회 정비 때 쓰였고, 평소에는 비어 있거나
-// 충돌만 보여주는 참고용).
+// 찾아 한 번에 반영한다(applyPositionAssignments 재사용). 현재 명단은
+// previewPositionMigration(회원 role/department 스캔)으로 만들어 엑셀
+// 다운로드와 업로드 비교 기준으로만 쓰고, 화면에 따로 보여주지는 않는다.
 class PositionMigrationScreen extends StatefulWidget {
   const PositionMigrationScreen({super.key});
 
@@ -87,10 +87,39 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
     }
   }
 
+  // 미리보기를 닫는다 — 업로드한 파일은 반영하지 않고 버림
+  void _cancelPreview() {
+    setState(() {
+      _parseResult = null;
+      _uploadedBytes = null;
+      _uploadedFileName = null;
+    });
+  }
+
   Future<void> _applyExcelChanges() async {
     final result = _parseResult;
     // 버튼 비활성화와 별개로, 처리하지 못한 행이 있으면 여기서도 막는다
     if (result == null || result.changes.isEmpty || result.errors.isNotEmpty) return;
+    // 미리보기를 검수한 뒤에도 한 번 더 확인받는다(실제 역할이 바뀌는 작업)
+    final summary = LeaderRosterPreviewSummary.of(result);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('최종 반영'),
+        content: Text(
+          '${summary.seatCount}개 자리를 변경합니다.\n'
+          '· 새로 자리를 맡는 사람: ${summary.assigned.length}명\n'
+          '· 다른 자리로 옮기는 사람: ${summary.moved.length}명\n'
+          '· 팀원으로 바뀌는 사람: ${summary.demoted.length}명\n\n'
+          '반영하면 바로 각 회원의 역할과 소속이 바뀝니다. 진행할까요?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('반영')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     setState(() => _applying = true);
     try {
       final performedBy = context.read<AuthProvider>().currentUser!.uid;
@@ -140,58 +169,6 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
     }
   }
 
-  Future<void> _applyClean(List<PositionMigrationEntry> clean) async {
-    setState(() => _applying = true);
-    try {
-      final performedBy = context.read<AuthProvider>().currentUser!.uid;
-      // 공석(matched가 빈 자리)도 그대로 반영해 positions 문서를 만들어 둔다
-      final assignments = clean
-          .map((e) => PositionAssignment(
-                positionId: e.def.id,
-                role: e.def.role,
-                department: e.def.department,
-                capacity: e.def.capacity,
-                executiveTitle: e.def.executiveTitle,
-                previousHolderUids: e.matched.map((u) => u.uid).toList(),
-                holderUids: e.matched.map((u) => u.uid).toList(),
-              ))
-          .toList();
-      await _service.applyPositionAssignments(assignments, performedBy: performedBy);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('충돌 없는 자리 ${assignments.length}개를 반영했습니다.'), backgroundColor: AppColors.success),
-      );
-      _reload();
-    } finally {
-      if (mounted) setState(() => _applying = false);
-    }
-  }
-
-  Future<void> _resolveConflict(PositionMigrationEntry entry, String winnerUid) async {
-    setState(() => _applying = true);
-    try {
-      final performedBy = context.read<AuthProvider>().currentUser!.uid;
-      await _service.applyPositionAssignments([
-        PositionAssignment(
-          positionId: entry.def.id,
-          role: entry.def.role,
-          department: entry.def.department,
-          capacity: entry.def.capacity,
-          executiveTitle: entry.def.executiveTitle,
-          previousHolderUids: entry.matched.map((u) => u.uid).toList(),
-          holderUids: [winnerUid],
-        ),
-      ], performedBy: performedBy);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('선택한 사람으로 자리를 확정했습니다.'), backgroundColor: AppColors.success),
-      );
-      _reload();
-    } finally {
-      if (mounted) setState(() => _applying = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -201,9 +178,6 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
         builder: (ctx, snap) {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final entries = snap.data!;
-          final conflicts = entries.where((e) => e.isConflict).toList();
-          final clean = entries.where((e) => !e.isConflict).toList();
-          final filledClean = clean.where((e) => !e.isVacant).toList();
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -234,43 +208,13 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
               ),
               if (_parseResult != null) ...[
                 const SizedBox(height: 20),
-                _ExcelPreviewSection(result: _parseResult!, applying: _applying, onApply: _applyExcelChanges),
-              ],
-              const SizedBox(height: 24),
-              const Divider(),
-              const SizedBox(height: 12),
-              const Text('현재 상태 (자동 스캔)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SummaryCard(label: '충돌 없음', value: '${filledClean.length}개', color: AppColors.success),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _SummaryCard(label: '충돌', value: '${conflicts.length}개', color: AppColors.error),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (conflicts.isNotEmpty) ...[
-                const Text('충돌 — 직접 선택 필요', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(height: 8),
-                for (final e in conflicts) _ConflictCard(entry: e, applying: _applying, onResolve: (uid) => _resolveConflict(e, uid)),
-                const SizedBox(height: 20),
-              ],
-              if (filledClean.isNotEmpty) ...[
-                Row(
-                  children: [
-                    const Expanded(child: Text('충돌 없는 자리', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
-                    ElevatedButton(
-                      onPressed: _applying ? null : () => _applyClean(clean),
-                      child: const Text('전체 반영'),
-                    ),
-                  ],
+                _ExcelPreviewSection(
+                  result: _parseResult!,
+                  fileName: _uploadedFileName,
+                  applying: _applying,
+                  onApply: _applyExcelChanges,
+                  onCancel: _cancelPreview,
                 ),
-                const SizedBox(height: 8),
-                for (final e in filledClean) _CleanCard(entry: e),
               ],
             ],
           );
@@ -280,162 +224,222 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
   }
 }
 
+// 엑셀 업로드 결과 미리보기. 업로드만으로는 아무것도 바뀌지 않고, 관리자가
+// 이 영역에서 자리별 변경 내용과 사람별 영향(새로 지정/이동/팀원으로 변경)을
+// 검수한 뒤 "최종 반영"을 눌러야 실제로 적용된다
 class _ExcelPreviewSection extends StatelessWidget {
   final LeaderRosterParseResult result;
+  final String? fileName;
   final bool applying;
   final VoidCallback onApply;
+  final VoidCallback onCancel;
 
-  const _ExcelPreviewSection({required this.result, required this.applying, required this.onApply});
+  const _ExcelPreviewSection({
+    required this.result,
+    required this.fileName,
+    required this.applying,
+    required this.onApply,
+    required this.onCancel,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (result.errors.isNotEmpty) ...[
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.error.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('처리하지 못한 행', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.error)),
-                const SizedBox(height: 6),
-                for (final e in result.errors)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text('· $e', style: const TextStyle(fontSize: 12, color: AppColors.error)),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-        if (result.changes.isNotEmpty) ...[
+    final summary = LeaderRosterPreviewSummary.of(result);
+    final hasErrors = result.errors.isNotEmpty;
+    final canApply = !applying && !hasErrors && result.changes.isNotEmpty;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
             children: [
-              Expanded(child: Text('변경 예정 ${result.changes.length}건', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
-              // 처리하지 못한 행이 하나라도 있으면 일부만 반영되는 일이 없도록
-              // 엑셀을 고쳐 다시 올릴 때까지 반영을 막는다
-              ElevatedButton(
-                onPressed: applying || result.errors.isNotEmpty ? null : onApply,
-                child: const Text('반영'),
+              const Icon(Icons.fact_check_outlined, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('업로드 미리보기', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+              IconButton(
+                tooltip: '미리보기 닫기',
+                icon: const Icon(Icons.close),
+                onPressed: applying ? null : onCancel,
               ),
             ],
           ),
-          if (result.errors.isNotEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: Text('처리하지 못한 행을 엑셀에서 고친 뒤 다시 올려야 반영할 수 있습니다.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          Text(
+            '${fileName != null ? '$fileName · ' : ''}아직 반영되지 않았습니다. 아래 내용을 확인한 뒤 "최종 반영"을 눌러 주세요.',
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _CountChip(label: '변경 자리', count: summary.seatCount, color: AppColors.primary),
+              _CountChip(label: '새로 지정', count: summary.assigned.length, color: AppColors.success),
+              _CountChip(label: '자리 이동', count: summary.moved.length, color: Colors.orange),
+              _CountChip(label: '팀원으로 변경', count: summary.demoted.length, color: AppColors.error),
+              if (hasErrors) _CountChip(label: '오류', count: result.errors.length, color: AppColors.error),
+            ],
+          ),
+          if (hasErrors) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('처리하지 못한 행', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.error)),
+                  const SizedBox(height: 6),
+                  for (final e in result.errors)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text('· $e', style: const TextStyle(fontSize: 12, color: AppColors.error)),
+                    ),
+                  const SizedBox(height: 6),
+                  // 일부만 반영되는 일이 없도록, 엑셀을 고쳐 다시 올릴 때까지 반영을 막는다
+                  const Text('엑셀에서 위 행을 고친 뒤 다시 업로드해야 반영할 수 있습니다.',
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                ],
+              ),
             ),
-          const SizedBox(height: 8),
-          for (final c in result.changes) _ChangeCard(change: c),
-        ] else if (result.errors.isEmpty)
-          const Text('변경할 내용이 없습니다.', style: TextStyle(color: AppColors.textSecondary)),
-      ],
+          ],
+          const SizedBox(height: 12),
+          if (result.changes.isNotEmpty) ...[
+            const Text('자리별 변경 내용', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 6),
+            for (final c in result.changes) _ChangeCard(change: c, summary: summary),
+          ] else if (!hasErrors)
+            const Text('엑셀 내용이 현재 명단과 같아 변경할 내용이 없습니다.', style: TextStyle(color: AppColors.textSecondary)),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton(onPressed: applying ? null : onCancel, child: const Text('취소')),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: canApply ? onApply : null,
+                icon: applying
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.check),
+                label: const Text('최종 반영'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
 
+class _CountChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+  const _CountChip({required this.label, required this.count, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text('$label $count', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+    );
+  }
+}
+
+// 자리 하나의 변경 전 → 변경 후. 동명이인·이메일 오타를 알아볼 수 있도록
+// 이메일을 함께 보여주고, 사람마다 반영 후 어떻게 되는지 표시한다
 class _ChangeCard extends StatelessWidget {
   final LeaderRosterChange change;
-  const _ChangeCard({required this.change});
+  final LeaderRosterPreviewSummary summary;
+  const _ChangeCard({required this.change, required this.summary});
 
   @override
   Widget build(BuildContext context) {
-    // 동명이인·이메일 오타를 알아볼 수 있도록 이메일도 함께 보여준다
-    final before = change.before.isEmpty ? '공석' : change.before.map((u) => '${u.name}(${u.email})').join(', ');
-    final after = change.after.isEmpty ? '공석' : change.after.map((u) => '${u.name}(${u.email})').join(', ');
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        dense: true,
-        title: Text(change.def.label),
-        subtitle: Text('$before → $after'),
-      ),
-    );
-  }
-}
+    final beforeIds = change.before.map((u) => u.uid).toSet();
+    final afterIds = change.after.map((u) => u.uid).toSet();
+    final leaving = change.before.where((u) => !afterIds.contains(u.uid)).toList();
+    final staying = change.before.where((u) => afterIds.contains(u.uid)).toList();
+    final arriving = change.after.where((u) => !beforeIds.contains(u.uid)).toList();
 
-class _SummaryCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  const _SummaryCard({required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-            Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CleanCard extends StatelessWidget {
-  final PositionMigrationEntry entry;
-  const _CleanCard({required this.entry});
-
-  @override
-  Widget build(BuildContext context) {
-    final names = entry.matched.map((u) => u.name).join(', ');
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        dense: true,
-        title: Text(entry.def.label),
-        subtitle: Text(names.isEmpty ? '공석' : names),
-      ),
-    );
-  }
-}
-
-class _ConflictCard extends StatelessWidget {
-  final PositionMigrationEntry entry;
-  final bool applying;
-  final ValueChanged<String> onResolve;
-  const _ConflictCard({required this.entry, required this.applying, required this.onResolve});
-
-  @override
-  Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      color: AppColors.error.withValues(alpha: 0.05),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(entry.def.label, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            const Text('아래 중 한 명을 선택해 자리를 확정해 주세요. 선택되지 않은 사람은 팀원으로 전환됩니다.',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-            const SizedBox(height: 8),
-            for (final u in entry.matched)
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text(u.name),
-                subtitle: Text(u.email),
-                trailing: ElevatedButton(
-                  onPressed: applying ? null : () => onResolve(u.uid),
-                  child: const Text('이 사람으로 확정'),
-                ),
+            Text(change.def.label, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            _PersonLine(heading: '변경 전', people: change.before.map(_who).toList()),
+            _PersonLine(heading: '변경 후', people: change.after.map(_who).toList()),
+            if (leaving.isNotEmpty || arriving.isNotEmpty) const Divider(height: 16),
+            for (final u in arriving)
+              _ImpactLine(
+                text: '${_who(u)} → 이 자리를 맡음${summary.moved.contains(u.uid) ? ' (다른 자리에서 이동)' : ''}',
+                color: AppColors.success,
               ),
+            for (final u in leaving)
+              _ImpactLine(
+                text: summary.moved.contains(u.uid) || summary.assigned.contains(u.uid)
+                    ? '${_who(u)} → 다른 자리로 이동'
+                    : '${_who(u)} → 팀원으로 변경',
+                color: summary.demoted.contains(u.uid) ? AppColors.error : Colors.orange,
+              ),
+            if (staying.isNotEmpty && change.def.isMultiSeat)
+              _ImpactLine(text: '유지: ${staying.map(_who).join(', ')}', color: AppColors.textSecondary),
           ],
         ),
       ),
+    );
+  }
+
+  static String _who(UserModel u) => '${u.name}(${u.email})';
+}
+
+class _PersonLine extends StatelessWidget {
+  final String heading;
+  final List<String> people;
+  const _PersonLine({required this.heading, required this.people});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 56, child: Text(heading, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+          Expanded(child: Text(people.isEmpty ? '공석' : people.join(', '), style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImpactLine extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _ImpactLine({required this.text, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text('· $text', style: TextStyle(fontSize: 12, color: color)),
     );
   }
 }
