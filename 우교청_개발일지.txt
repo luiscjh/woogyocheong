@@ -2334,7 +2334,9 @@
   - 검증: Firestore 에뮬레이터 60건 모두 기대대로(스크래치패드 테스트, 커밋하지
     않음), 보안 감사 자체 테스트에서도 B1·N4~N6·S1~S4 재현이 모두 거부됨.
     flutter test 12건 통과, flutter analyze 이슈 없음, iOS 시뮬레이터 재기동
-    완료. 사용자 승인 후 firebase deploy --only firestore:rules로 실서버 배포
+    완료. 사용자 승인 후 firebase deploy --only firestore:rules로 실서버 배포,
+    이어서 flutter build web --release 후 Hosting 배포(앱 쪽 수정 웹 반영 —
+    배포된 main.dart.js가 로컬 빌드와 같음을 확인). 스토어 빌드는 다음 제출 때 반영
   - 남은 비차단 제안(미반영)
     · N-a: 소팀장이 피해자 문서의 email을 바꾼 뒤 본인 문서에 피해자 이메일을
       적으면 중복 검사를 피할 수 있음(내부자) — 소팀장 분기에서 기존 email
