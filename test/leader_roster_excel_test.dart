@@ -119,6 +119,15 @@ void main() {
     expect(r.changes.single.after.map((u) => u.uid), ['m']);
   });
 
+  test('여러 회원이 같이 쓰는 이메일은 지정하지 않고 오류', () {
+    final r = parseLeaderRosterExcel(upload({seatA.id: m.email}),
+        currentEntries: current(),
+        usersByEmail: {...usersByEmail}..remove(m.email),
+        duplicateEmails: {m.email});
+    expect(r.changes, isEmpty);
+    expect(r.errors.single, contains('같은 이메일을 쓰는 회원이 여러 명'));
+  });
+
   test('1MB를 넘는 파일은 풀기 전에 거부한다', () {
     final r = parse(List<int>.filled(1024 * 1024 + 1, 0));
     expect(r.errors.single, contains('1MB'));

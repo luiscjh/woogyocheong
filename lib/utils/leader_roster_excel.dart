@@ -86,11 +86,13 @@ class LeaderRosterPreviewSummary {
 
 // 업로드된 엑셀 바이트를 파싱해, currentEntries(방금 다시 스캔한 최신 상태)와
 // 달라진 자리만 changes로 뽑는다. usersByEmail은 "변경 후" 칸의 이메일을 실제
-// 회원으로 찾기 위한 색인(FirestoreService.fetchUsersByEmail 결과).
+// 회원으로 찾기 위한 색인(FirestoreService.fetchUsersByEmail 결과). duplicateEmails는
+// 여러 회원이 같이 쓰고 있어 누구인지 정할 수 없는 이메일(usersByEmail에는 없음).
 LeaderRosterParseResult parseLeaderRosterExcel(
   List<int> bytes, {
   required List<PositionMigrationEntry> currentEntries,
   required Map<String, UserModel> usersByEmail,
+  Set<String> duplicateEmails = const {},
 }) {
   // 리더 명단은 수십 행짜리 작은 파일이라, 이보다 크면 잘못된 파일(또는 압축
   // 폭탄)로 보고 메모리에 풀기 전에 거부한다
@@ -180,6 +182,11 @@ LeaderRosterParseResult parseLeaderRosterExcel(
     final afterUsers = <UserModel>[];
     var rowHasError = false;
     for (final email in afterEmails) {
+      if (duplicateEmails.contains(email)) {
+        errors.add('${entry.def.label}: 같은 이메일을 쓰는 회원이 여러 명입니다 ($email). 청년부 명단에서 중복 회원을 정리해 주세요.');
+        rowHasError = true;
+        continue;
+      }
       final u = usersByEmail[email];
       if (u == null) {
         errors.add('${entry.def.label}: 일치하는 회원 없음 ($email)');

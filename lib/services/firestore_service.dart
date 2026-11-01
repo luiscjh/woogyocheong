@@ -314,14 +314,23 @@ class FirestoreService {
   // 이메일(소문자/trim 정규화) → UserModel 매핑. 리더 명단 엑셀 업로드에서
   // "변경 후" 칸에 적힌 이메일로 실제 회원을 찾는 데 사용. QA 테스트 계정은
   // previewPositionMigration과 동일한 이유로 제외(엑셀로 자리에 지정할 수 없음)
-  Future<Map<String, UserModel>> fetchUsersByEmail() async {
+  // 같은 이메일을 쓰는 회원이 둘 이상이면 어느 쪽인지 정할 수 없으므로 byEmail에서
+  // 빼고 duplicates로 따로 돌려준다 — 한쪽을 조용히 골라 버리면 남의 이메일을
+  // 적어 둔 계정이 대신 승급될 수 있음(28차 작업 보안 점검 S1)
+  Future<({Map<String, UserModel> byEmail, Set<String> duplicates})> fetchUsersByEmail() async {
     final users = demoMode
         ? _demo.allMembersSnapshot()
         : (await _db.collection('users').get()).docs.map(UserModel.fromFirestore).toList();
-    return {
-      for (final u in users)
-        if (u.email.toLowerCase() != 'testing@church.com') u.email.trim().toLowerCase(): u,
-    };
+    final byEmail = <String, UserModel>{};
+    final duplicates = <String>{};
+    for (final u in users) {
+      final email = u.email.trim().toLowerCase();
+      if (email.isEmpty || email == 'testing@church.com') continue;
+      if (byEmail.containsKey(email)) duplicates.add(email);
+      byEmail[email] = u;
+    }
+    byEmail.removeWhere((email, _) => duplicates.contains(email));
+    return (byEmail: byEmail, duplicates: duplicates);
   }
 
   // 실제로 반영("반영" 버튼)된 리더 명단 엑셀 원본을 30일간만 보관한다.

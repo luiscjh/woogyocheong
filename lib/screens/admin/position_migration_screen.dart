@@ -64,8 +64,9 @@ class _PositionMigrationScreenState extends State<PositionMigrationScreen> {
     setState(() => _uploading = true);
     try {
       final bytes = await file.readAsBytes();
-      final usersByEmail = await _service.fetchUsersByEmail();
-      final result = parseLeaderRosterExcel(bytes, currentEntries: currentEntries, usersByEmail: usersByEmail);
+      final index = await _service.fetchUsersByEmail();
+      final result = parseLeaderRosterExcel(bytes,
+          currentEntries: currentEntries, usersByEmail: index.byEmail, duplicateEmails: index.duplicates);
       if (!mounted) return;
       setState(() {
         _parseResult = result;

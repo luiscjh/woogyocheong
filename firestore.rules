@@ -79,11 +79,29 @@ service cloud.firestore {
     function notRaised(key) {
       return unchanged(key, false) || request.resource.data.get(key, false) == false;
     }
+    // users 문서에 앱(UserModel.toMap)이 쓰는 필드만 허용 — 정의되지 않은 필드를
+    // 끼워 넣어 두면 나중에 같은 이름의 권한 필드가 추가될 때 그대로 권한이
+    // 되므로, 관리자 외의 생성·온보딩에서는 막아 둔다(28차 작업 보안 점검 N6).
+    // toMap에 필드를 추가하면 여기에도 같이 추가해야 함
+    function userKeys() {
+      return ['name', 'email', 'phone', 'role', 'department', 'joinDate', 'profileImageUrl',
+        'permissions', 'newFamilyGraduatedTo', 'ministryTeam', 'executiveTitle',
+        'isMinistryLead', 'bannerAccessGranted', 'birthDate', 'cohort'];
+    }
+    function hasOnlyUserKeys() {
+      return request.resource.data.keys().hasOnly(userKeys());
+    }
+    // 수정에서는 "새로 바뀌거나 추가되는 필드"만 검사 — 콘솔 등으로 예전에 들어간
+    // 다른 필드가 남아 있는 문서도 계속 수정할 수 있게 한다(S3)
+    function changesOnlyUserKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(userKeys());
+    }
     // 새로 만드는 users 문서가 권한 필드를 들고 생기지 않게 한다 — 임원팀 직책·
     // permissions는 비어 있고 사역팀장 플래그는 false. 배너 위임만은 콘텐츠팀
     // 팀장이 콘텐츠팀원을 회원 추가 화면에서 만들 때 허용(update 규칙과 같은 범위)
     function createsNoPrivilege() {
-      return request.resource.data.get('permissions', []) == [] &&
+      return hasOnlyUserKeys() &&
+        request.resource.data.get('permissions', []) == [] &&
         request.resource.data.get('executiveTitle', '') == '' &&
         request.resource.data.get('isMinistryLead', false) == false &&
         (request.resource.data.get('bannerAccessGranted', false) == false ||
@@ -103,10 +121,19 @@ service cloud.firestore {
       // 권한 필드를 들고 생성할 수 없다(createsNoPrivilege) — 그러지 않으면 본인
       // 문서를 삭제(회원 탈퇴)한 뒤 콘텐츠팀장·배너 권한을 넣어 다시 만들어 F3
       // 수정을 우회할 수 있었음(28차 작업)
+      // 본인 생성의 email은 실제 로그인 계정 이메일과 같아야 함 — 남의 이메일을
+      // 적어 두면 리더 명단 엑셀(이메일로 회원을 찾음)로 그 사람 대신 승급될 수
+      // 있었음(28차 작업 보안 점검 S1). 앱은 처음부터 firebaseUser.email(없으면
+      // '')을 그대로 쓴다
       allow create: if isAdmin() ||
         (isSmallLeader() && request.resource.data.role == 'member' && createsNoPrivilege()) ||
         (isOwner(uid) && request.resource.data.role == 'member' && request.resource.data.department == '' &&
-         request.resource.data.get('ministryTeam', '') == '' && createsNoPrivilege());
+         request.resource.data.get('ministryTeam', '') == '' && createsNoPrivilege() &&
+         request.resource.data.get('email', '') == request.auth.token.get('email', '') &&
+         // 이메일/비밀번호 가입은 인증 메일 없이도 아무 이메일로 만들 수 있으므로,
+         // 이메일을 적으려면 인증된 이메일(Google 로그인은 항상 인증됨)이어야 함(재검토 B1)
+         (request.resource.data.get('email', '') == '' ||
+          request.auth.token.get('email_verified', false) == true || isTestAccount()));
       allow update: if
         // 일반 정보(이름/연락처/소속팀/사역팀 등) 수정: 소팀장 이상, role·permissions는 그대로.
         // 임원팀 직책·사역팀장·배너 권한 위임은 앱에서 관리자(배너 위임은 콘텐츠팀
@@ -114,11 +141,14 @@ service cloud.firestore {
         // 소팀장이 SDK로 자기 문서에 콘텐츠팀장을 써서 배너 권한을 얻을 수 있었음
         // (26차 작업 보안 점검 F3). 사역팀을 옮길 때도 팀장/위임 플래그를 들고
         // 갈 수 없게 함(앱도 사역팀 해제 시 두 플래그를 같이 내림)
-        // permissions는 필드가 없는 예전 문서도 수정할 수 있게 get 기본값으로 비교(28차 작업)
+        // permissions는 필드가 없는 예전 문서도 수정할 수 있게 get 기본값으로 비교(28차 작업).
+        // 사역팀장 지정·해임은 관리자만이므로 isMinistryLead는 아예 바꿀 수 없고(S2),
+        // 앱이 쓰지 않는 필드를 새로 끼워 넣을 수도 없다(S3)
         (isSmallLeader() && request.resource.data.role == resource.data.role &&
+         changesOnlyUserKeys() &&
          unchanged('permissions', []) &&
          unchanged('executiveTitle', '') &&
-         notRaised('isMinistryLead') && notRaised('bannerAccessGranted') &&
+         unchanged('isMinistryLead', false) && notRaised('bannerAccessGranted') &&
          (unchanged('ministryTeam', '') ||
           (request.resource.data.get('isMinistryLead', false) == false &&
            request.resource.data.get('bannerAccessGranted', false) == false))) ||
@@ -129,9 +159,17 @@ service cloud.firestore {
         (isTestAccount() && isOwner(uid)) ||
         // 신규 가입 온보딩: 방금 만든 본인 문서(department가 비어있던 상태)에 소속팀 등
         // 정보를 처음 채우는 것만 허용, role은 member로 유지
-        // (온보딩 화면은 이름·소속팀·생년월일·기수만 채움 — 권한 관련 필드는 그대로)
+        // (온보딩 화면은 이름·소속팀·생년월일·기수만 채움 — 권한 관련 필드는 그대로).
+        // 소속팀은 온보딩 화면 목록(AppTeams.smallTeams)에서만 고를 수 있고 기수는
+        // 숫자 필수 — 그러지 않으면 탈퇴 후 재가입하면서 '임원팀' 같은 소속이나
+        // 빈 기수로 기수 이용 제한을 피할 수 있었음(28차 작업 보안 점검 N5)
+        // email은 가입 때 정해진 로그인 이메일 그대로(S1)
         (isOwner(uid) && resource.data.role == 'member' && request.resource.data.role == 'member' &&
-         resource.data.department == '' && request.resource.data.department != '' &&
+         resource.data.department == '' && unchanged('email', '') &&
+         request.resource.data.department in [
+           'A-1', 'A-2', 'A-3', 'A-4', 'B-1', 'B-2', 'B-3', 'B-4',
+           'C-1', 'C-2', 'C-3', 'C-4', 'D-1', 'D-2', 'D-3', 'D-4', '새가족팀'] &&
+         request.resource.data.get('cohort', null) is int && hasOnlyUserKeys() &&
          unchanged('permissions', []) && unchanged('executiveTitle', '') && unchanged('ministryTeam', '') &&
          unchanged('isMinistryLead', false) && unchanged('bannerAccessGranted', false)) ||
         // 콘텐츠팀 팀장이 팀원의 사역팀 소속 해제/배너 권한 위임을 관리 — 콘텐츠팀
@@ -154,9 +192,13 @@ service cloud.firestore {
          unchanged('permissions', []) && unchanged('executiveTitle', '') && unchanged('birthDate', null) &&
          unchanged('cohort', null) && unchanged('profileImageUrl', null) && unchanged('newFamilyGraduatedTo', null));
       // 본인 문서 삭제는 회원 탈퇴(스토어 정책상 필수) 용도 — 앱은 목사님 본인 탈퇴를 UI에서
-      // 막고 먼저 역할 양도를 안내함
+      // 막고 먼저 역할 양도를 안내함. 소팀장 이상이 지울 수 있는 건 사역팀장·배너
+      // 위임이 없는 일반 팀원뿐 — 그러지 않으면 다른 소팀장 문서를 지우고 member로
+      // 다시 만들어 사실상 강등시킬 수 있었음(역할 변경은 관리자만, 28차 작업 N4)
       allow delete: if isAdmin() ||
-        (isSmallLeader() && !(resource.data.role in ['admin', 'pastor', 'executive', 'mid_leader'])) ||
+        (isSmallLeader() && resource.data.get('role', 'member') == 'member' &&
+         resource.data.get('isMinistryLead', false) == false &&
+         resource.data.get('bannerAccessGranted', false) == false) ||
         isOwner(uid);
     }
 

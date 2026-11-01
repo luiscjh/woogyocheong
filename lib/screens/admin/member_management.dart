@@ -147,10 +147,18 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
       confirmLabel: '제거',
     );
     if (!confirm) return;
-    await _service.updateUser(
-      member.copyWith(ministryTeam: '', isMinistryLead: false, bannerAccessGranted: false),
-      previousDepartment: member.department,
-    );
+    try {
+      await _service.updateUser(
+        member.copyWith(ministryTeam: '', isMinistryLead: false, bannerAccessGranted: false),
+        previousDepartment: member.department,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('제거하지 못했습니다: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
   }
 
   void _showFormatGuide() {
@@ -449,6 +457,9 @@ class _MemberTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 관리자가 아니면 사역팀장·배너 위임이 없는 일반 팀원만 삭제 가능(firestore.rules와 동일)
+    final canDelete = context.watch<AuthProvider>().isAdmin ||
+        (member.role == UserRole.member && !member.isMinistryLead && !member.bannerAccessGranted);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -495,7 +506,8 @@ class _MemberTile extends StatelessWidget {
                 },
                 itemBuilder: (_) => [
                   const PopupMenuItem(value: 'edit', child: Text('수정')),
-                  const PopupMenuItem(value: 'delete', child: Text('삭제', style: TextStyle(color: Colors.red))),
+                  if (canDelete)
+                    const PopupMenuItem(value: 'delete', child: Text('삭제', style: TextStyle(color: Colors.red))),
                 ],
               ),
       ),
@@ -508,8 +520,15 @@ class _MemberTile extends StatelessWidget {
       title: '회원 삭제',
       content: '${member.name}님을 삭제하시겠습니까?',
     );
-    if (confirm) {
+    if (!confirm) return;
+    try {
       await service.deleteUser(member.uid);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('삭제하지 못했습니다: $e'), backgroundColor: AppColors.error),
+        );
+      }
     }
   }
 }
@@ -659,6 +678,8 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     // 배너 관리 권한 공유(위임)는 관리자 또는 해당 사역팀 팀장만 가능
     final canShareBannerAccess = auth.canShareBannerAccess;
     final canJoinMinistry = AppTeams.canJoinMinistryTeam(_role);
+    // 사역팀을 바꾸면 사역팀장 지정이 풀리므로, 사역팀장인 회원의 사역팀은 관리자만 변경
+    final lockMinistryTeam = !canEditMinistryLead && (widget.member?.isMinistryLead ?? false);
 
     return AlertDialog(
       title: Text(isEditing ? '회원 수정' : '회원 추가'),
@@ -750,12 +771,15 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: canJoinMinistry ? _ministryTeam : '',
-                decoration: const InputDecoration(labelText: '사역팀 (선택)'),
+                decoration: InputDecoration(
+                  labelText: '사역팀 (선택)',
+                  helperText: lockMinistryTeam ? '사역팀장의 사역팀은 관리자만 변경할 수 있습니다.' : null,
+                ),
                 items: [
                   const DropdownMenuItem(value: '', child: Text('없음')),
                   ...AppTeams.ministryTeams.map((t) => DropdownMenuItem(value: t, child: Text(t))),
                 ],
-                onChanged: !canJoinMinistry
+                onChanged: !canJoinMinistry || lockMinistryTeam
                     ? null
                     : (v) => setState(() {
                           _ministryTeam = v ?? '';
