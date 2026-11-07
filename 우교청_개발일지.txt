@@ -2349,3 +2349,42 @@
     · 콘솔: Firebase 콘솔에서 이메일/비밀번호 신규 가입 막기 권장
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[29차 작업] 2026-11-07
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 28차 작업에서 미반영으로 남긴 N-a, N-b, N-c 반영
+  - 배경: 28차 작업 보안 감사에서 비차단(안 막아도 당장 위험하진 않지만
+    고치는 게 좋은) 제안으로 남겨 뒀던 세 가지를 마저 반영
+  - N-a (내부자가 이메일을 바꿔 치기해 중복 검사를 피하는 경로 차단):
+    firestore.rules의 소팀장 수정 분기에 "이미 있는 email은 관리자만
+    바꿀 수 있고, 비어 있던 email을 처음 채우는 것만 허용"하는 조건
+    추가. lib/screens/admin/member_management.dart에도 같은 제약을
+    UI에 반영 — 관리자가 아니면 이미 등록된 이메일 입력칸을 읽기
+    전용으로 잠그고 안내 문구 표시(비어 있던 이메일을 새로 채우는
+    것은 그대로 가능)
+  - N-b (중복 이메일 오류 문구에 당사자 정보와 정리 방법 안내):
+    firestore_service.dart의 fetchUsersByEmail이 돌려주는 duplicates를
+    Set<String>(이메일만)에서 Map<String, List<UserModel>>(이메일 →
+    그 이메일을 쓰는 회원 전체)으로 바꿔, leader_roster_excel.dart의
+    오류 문구에 각 회원의 이름·소속과 "로그인 계정/명단 등록" 구분을
+    넣고 "명단 등록 쪽을 지우고 다시 올려 달라"는 구체적 안내로 교체.
+    CSV 가져오기·회원 추가 화면으로 생성된 문서는 uid가 UUID
+    형식이고 실제 Google 로그인으로 생긴 문서는 Firebase Auth uid
+    형식이라는 점을 이용해 isRosterOnlyUid()로 구분
+  - N-c (콘솔 등으로 들어간 예전 필드가 있으면 소팀장 수정이 막히고,
+    실패해도 안내가 없던 문제): firestore_service.dart의 saveMember가
+    쓰던 `txn.set(..., finalUser.toMap())`를 `SetOptions(merge: true)`로
+    바꿔, toMap에 없는 예전 필드는 지우지 않고 남겨 둠(규칙의
+    changesOnlyUserKeys가 "새로 바뀐 필드"만 보므로 더는 걸리지
+    않음). member_management.dart의 _save()에 try/catch를 추가해
+    저장 실패 시 스낵바로 안내
+  - test/leader_roster_excel_test.dart: 중복 이메일 테스트를 새 Map
+    구조·안내 문구 검증으로 갱신, isRosterOnlyUid 단위 테스트 추가
+    (총 13건, 기존 placeholder 포함 — 전부 통과)
+  - 검증: flutter analyze 이슈 없음, flutter test 13건 통과. 이
+    작업은 커밋되지 않은 상태로 다음 세션까지 이어졌다가, "여기까지
+    진행된 내용 개발일지에 반영해줘"라는 요청으로 뒤늦게 이 기록을
+    남기면서 커밋도 함께 정리함. firestore.rules 배포와 Hosting
+    재배포는 아직 진행 전 — 사용자 승인 필요
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
