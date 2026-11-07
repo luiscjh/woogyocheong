@@ -119,13 +119,23 @@ void main() {
     expect(r.changes.single.after.map((u) => u.uid), ['m']);
   });
 
-  test('여러 회원이 같이 쓰는 이메일은 지정하지 않고 오류', () {
+  test('여러 회원이 같이 쓰는 이메일은 지정하지 않고 누가 겹치는지 알려 준다', () {
+    final csvCopy = UserModel(
+        uid: '3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c', name: 'm', email: m.email, phone: '',
+        role: UserRole.member, department: 'B-1', joinDate: DateTime(2026));
     final r = parseLeaderRosterExcel(upload({seatA.id: m.email}),
         currentEntries: current(),
         usersByEmail: {...usersByEmail}..remove(m.email),
-        duplicateEmails: {m.email});
+        duplicateEmails: {m.email: [m, csvCopy]});
     expect(r.changes, isEmpty);
-    expect(r.errors.single, contains('같은 이메일을 쓰는 회원이 여러 명'));
+    expect(r.errors.single, contains('같은 이메일(${m.email})을 쓰는 회원이 여러 명'));
+    expect(r.errors.single, contains('m(${seatA.department}, 로그인 계정)'));
+    expect(r.errors.single, contains('m(B-1, 명단 등록)'));
+  });
+
+  test('명단 등록 문서(UUID)와 로그인 계정 uid를 구분한다', () {
+    expect(isRosterOnlyUid('3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c'), isTrue);
+    expect(isRosterOnlyUid('aB3dE5fG7hI9jK1lM3nO5pQ7rS9t'), isFalse);
   });
 
   test('1MB를 넘는 파일은 풀기 전에 거부한다', () {

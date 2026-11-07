@@ -144,8 +144,12 @@ service cloud.firestore {
         // permissions는 필드가 없는 예전 문서도 수정할 수 있게 get 기본값으로 비교(28차 작업).
         // 사역팀장 지정·해임은 관리자만이므로 isMinistryLead는 아예 바꿀 수 없고(S2),
         // 앱이 쓰지 않는 필드를 새로 끼워 넣을 수도 없다(S3)
+        // 이미 있는 email은 관리자만 바꿀 수 있고 비어 있던 email을 처음 채우는 것만
+        // 허용 — 그러지 않으면 소팀장이 남의 email을 자기 문서로 옮겨 리더 명단
+        // 엑셀로 그 사람 대신 승급될 수 있었음(28차 작업 보안 점검 N-a)
         (isSmallLeader() && request.resource.data.role == resource.data.role &&
          changesOnlyUserKeys() &&
+         (unchanged('email', '') || resource.data.get('email', '') == '') &&
          unchanged('permissions', []) &&
          unchanged('executiveTitle', '') &&
          unchanged('isMinistryLead', false) && notRaised('bannerAccessGranted') &&

@@ -87,12 +87,12 @@ class LeaderRosterPreviewSummary {
 // 업로드된 엑셀 바이트를 파싱해, currentEntries(방금 다시 스캔한 최신 상태)와
 // 달라진 자리만 changes로 뽑는다. usersByEmail은 "변경 후" 칸의 이메일을 실제
 // 회원으로 찾기 위한 색인(FirestoreService.fetchUsersByEmail 결과). duplicateEmails는
-// 여러 회원이 같이 쓰고 있어 누구인지 정할 수 없는 이메일(usersByEmail에는 없음).
+// 여러 회원이 같이 쓰고 있어 누구인지 정할 수 없는 이메일 → 그 회원들(usersByEmail에는 없음).
 LeaderRosterParseResult parseLeaderRosterExcel(
   List<int> bytes, {
   required List<PositionMigrationEntry> currentEntries,
   required Map<String, UserModel> usersByEmail,
-  Set<String> duplicateEmails = const {},
+  Map<String, List<UserModel>> duplicateEmails = const {},
 }) {
   // 리더 명단은 수십 행짜리 작은 파일이라, 이보다 크면 잘못된 파일(또는 압축
   // 폭탄)로 보고 메모리에 풀기 전에 거부한다
@@ -182,8 +182,13 @@ LeaderRosterParseResult parseLeaderRosterExcel(
     final afterUsers = <UserModel>[];
     var rowHasError = false;
     for (final email in afterEmails) {
-      if (duplicateEmails.contains(email)) {
-        errors.add('${entry.def.label}: 같은 이메일을 쓰는 회원이 여러 명입니다 ($email). 청년부 명단에서 중복 회원을 정리해 주세요.');
+      final sharing = duplicateEmails[email];
+      if (sharing != null) {
+        final who = sharing
+            .map((u) => '${u.name}(${u.department.isEmpty ? '소속 없음' : u.department}, ${isRosterOnlyUid(u.uid) ? '명단 등록' : '로그인 계정'})')
+            .join(', ');
+        errors.add('${entry.def.label}: 같은 이메일($email)을 쓰는 회원이 여러 명입니다 — $who. '
+            '청년부 명단에서 로그인 계정이 아닌 쪽(명단 등록)을 삭제한 뒤 다시 올려 주세요.');
         rowHasError = true;
         continue;
       }
@@ -227,6 +232,11 @@ LeaderRosterParseResult parseLeaderRosterExcel(
 
   return LeaderRosterParseResult(changes: changes, errors: errors);
 }
+
+// CSV 가져오기·회원 추가 화면으로 만든 문서는 uid가 UUID(8-4-4-4-12)이고, 본인이
+// Google로 로그인해 생긴 문서는 Firebase Auth uid(하이픈 없는 28자)라 구분할 수 있다
+final _uuidPattern = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
+bool isRosterOnlyUid(String uid) => _uuidPattern.hasMatch(uid);
 
 String _cellText(CellValue? value) {
   return switch (value) {

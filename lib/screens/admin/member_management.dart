@@ -663,6 +663,12 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
         await widget.service.saveMember(user, performedBy: performedBy);
       }
       if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('저장하지 못했습니다: $e'), backgroundColor: AppColors.error),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -680,6 +686,9 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
     final canJoinMinistry = AppTeams.canJoinMinistryTeam(_role);
     // 사역팀을 바꾸면 사역팀장 지정이 풀리므로, 사역팀장인 회원의 사역팀은 관리자만 변경
     final lockMinistryTeam = !canEditMinistryLead && (widget.member?.isMinistryLead ?? false);
+    // 이미 등록된 이메일은 관리자만 변경(리더 명단 엑셀이 이메일로 회원을 찾으므로,
+    // firestore.rules와 동일) — 비어 있던 이메일을 처음 채우는 것은 가능
+    final lockEmail = !auth.isAdmin && (widget.member?.email.isNotEmpty ?? false);
 
     return AlertDialog(
       title: Text(isEditing ? '회원 수정' : '회원 추가'),
@@ -697,7 +706,11 @@ class _MemberFormDialogState extends State<_MemberFormDialog> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _emailCtrl,
-                decoration: const InputDecoration(labelText: '이메일 *'),
+                readOnly: lockEmail,
+                decoration: InputDecoration(
+                  labelText: '이메일 *',
+                  helperText: lockEmail ? '등록된 이메일은 관리자만 변경할 수 있습니다.' : null,
+                ),
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) => (v == null || v.isEmpty) ? '이메일을 입력해 주세요.' : null,
               ),

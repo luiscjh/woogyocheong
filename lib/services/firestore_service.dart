@@ -118,7 +118,10 @@ class FirestoreService {
         bannerAccessGranted: r.resetMinistry ? false : null,
       );
       finalUser0 = finalUser;
-      txn.set(_db.collection('users').doc(updated.uid), finalUser.toMap());
+      // merge: 콘솔 등으로 예전에 들어간 다른 필드는 지우지 않는다(지우면 소팀장
+      // 수정이 규칙의 changesOnlyUserKeys에 걸림, 보안 점검 N-c). toMap은 모든
+      // 필드를 담으므로 앱이 쓰는 필드는 그대로 덮어써진다
+      txn.set(_db.collection('users').doc(updated.uid), finalUser.toMap(), SetOptions(merge: true));
       if (notify && previous != null && previous.department.isNotEmpty &&
           previous.department != finalUser.department && finalUser.department.isNotEmpty) {
         txn.set(_db.collection('notifications').doc(), _notificationData(
@@ -317,20 +320,21 @@ class FirestoreService {
   // 같은 이메일을 쓰는 회원이 둘 이상이면 어느 쪽인지 정할 수 없으므로 byEmail에서
   // 빼고 duplicates로 따로 돌려준다 — 한쪽을 조용히 골라 버리면 남의 이메일을
   // 적어 둔 계정이 대신 승급될 수 있음(28차 작업 보안 점검 S1)
-  Future<({Map<String, UserModel> byEmail, Set<String> duplicates})> fetchUsersByEmail() async {
+  // duplicates에는 그 이메일을 쓰는 회원들을 함께 담아 오류 안내에 쓴다
+  Future<({Map<String, UserModel> byEmail, Map<String, List<UserModel>> duplicates})> fetchUsersByEmail() async {
     final users = demoMode
         ? _demo.allMembersSnapshot()
         : (await _db.collection('users').get()).docs.map(UserModel.fromFirestore).toList();
-    final byEmail = <String, UserModel>{};
-    final duplicates = <String>{};
+    final usersByEmail = <String, List<UserModel>>{};
     for (final u in users) {
       final email = u.email.trim().toLowerCase();
       if (email.isEmpty || email == 'testing@church.com') continue;
-      if (byEmail.containsKey(email)) duplicates.add(email);
-      byEmail[email] = u;
+      (usersByEmail[email] ??= []).add(u);
     }
-    byEmail.removeWhere((email, _) => duplicates.contains(email));
-    return (byEmail: byEmail, duplicates: duplicates);
+    return (
+      byEmail: {for (final e in usersByEmail.entries) if (e.value.length == 1) e.key: e.value.single},
+      duplicates: {for (final e in usersByEmail.entries) if (e.value.length > 1) e.key: e.value},
+    );
   }
 
   // 실제로 반영("반영" 버튼)된 리더 명단 엑셀 원본을 30일간만 보관한다.
