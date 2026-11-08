@@ -2384,7 +2384,13 @@
   - 검증: flutter analyze 이슈 없음, flutter test 13건 통과. 이
     작업은 커밋되지 않은 상태로 다음 세션까지 이어졌다가, "여기까지
     진행된 내용 개발일지에 반영해줘"라는 요청으로 뒤늦게 이 기록을
-    남기면서 커밋도 함께 정리함. firestore.rules 배포와 Hosting
-    재배포는 아직 진행 전 — 사용자 승인 필요
+    남기면서 커밋도 함께 정리함
+  - 사용자 승인("배포 진행하자") 후 firebase deploy --only
+    firestore:rules, flutter build web --release 후 firebase deploy
+    --only hosting 모두 완료(conference-c9c99, 2026-11-08). iOS
+    시뮬레이터 재기동 완료, 안드로이드 release APK 재빌드 완료. 태블릿
+    (갤럭시 탭 S9 Ultra)은 25차 작업부터 이번 세션까지 계속 USB 연결이
+    끊긴 상태라 설치는 다음 세션으로 이월(APK는 그때그때 최신으로
+    빌드돼 있음)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
