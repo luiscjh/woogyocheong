@@ -2492,4 +2492,30 @@
   - 커밋: pwa 브랜치(작업 사본)에만 커밋, push·배포는 하지 않음
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[32차 작업] 2026-11-14
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ PWA(설치형)를 접고 서비스 워커 없는 일반 웹앱으로 전환
+  - 배경: 31차 작업의 PWA는 검사 통과 후 Hosting에 배포까지
+    했으나(2026-11-14), "PWA 방식 말고 웹상에서 작동하는 웹앱을
+    원한다. 설치형은 업데이트 반영이 늦어질 것 같다"는 요청으로 전환
+  - web/manifest.json, web/offline.html 삭제, index.html에서 manifest
+    링크와 apple-mobile-web-app-capable 등 설치형 전용 메타 제거(크롬이
+    더 이상 "앱 설치"를 제안하지 않음). favicon·apple-touch-icon·
+    theme-color·lang="ko"·description은 북마크/탭 표시용으로 유지
+  - index.html의 sw.js 등록 코드를 "남아 있는 서비스 워커 전부 해제"
+    코드로 교체 — 31차에 잠시 배포된 sw.js와 예전 Flutter 기본
+    flutter_service_worker.js 모두 정리
+  - web/sw.js는 정리용(kill switch)으로 교체: 이미 sw.js를 받아 간
+    브라우저가 업데이트 확인 시 받아서 우교청/Flutter 캐시 삭제 →
+    스스로 등록 해제 → 열린 탭 새로고침
+  - firebase.json의 Cache-Control: no-cache는 유지 — 이것이 "배포 즉시
+    반영"의 핵심(매 접속 ETag 재검증, 안 바뀌었으면 304)
+  - 검증: flutter analyze "No issues found!", flutter test 13건 통과,
+    flutter build web --release 성공(build/web에 manifest.json·
+    offline.html 없음 확인)
+  - 커밋: webapp 브랜치(작업 사본, pwa에서 분기)
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

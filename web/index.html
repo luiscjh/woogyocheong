@@ -20,18 +20,13 @@
   <meta name="theme-color" content="#3F51B5">
   <meta name="application-name" content="우교청">
 
-  <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="우교청">
+  <!-- 홈 화면 바로가기/북마크 아이콘 (설치형 앱 모드는 쓰지 않음) -->
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
 
   <title>우교청</title>
-  <link rel="manifest" href="manifest.json">
   <style id="splash-screen-style">
     html {
       height: 100%
@@ -115,15 +110,14 @@
   -->
   <script src="flutter_bootstrap.js" async=""></script>
   <script>
-    // 우교청 PWA 서비스 워커 등록 (설치 가능 조건 + 오프라인 안내 페이지).
-    // updateViaCache: 'none' — sw.js 업데이트 확인 시 HTTP 캐시를 쓰지 않아
-    // 새 배포의 워커를 바로 받는다. 캐시 전략은 web/sw.js 주석 참고.
+    // 우교청은 서비스 워커 없이 일반 웹사이트로 동작한다. 새로 배포하면
+    // 다음 접속에서 바로 반영되도록(firebase.json의 Cache-Control: no-cache와
+    // 함께), 예전에 등록된 서비스 워커(PWA용 sw.js, Flutter 기본
+    // flutter_service_worker.js)가 남아 있으면 모두 해제한다.
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker
-          .register('sw.js', { updateViaCache: 'none' })
-          .catch(function (e) { console.warn('서비스 워커 등록 실패:', e); });
-      });
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) { reg.unregister(); });
+      }).catch(function () {});
     }
   </script>
 
