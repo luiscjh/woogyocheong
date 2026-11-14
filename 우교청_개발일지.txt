@@ -2516,6 +2516,12 @@
   - 검증: flutter analyze "No issues found!", flutter test 13건 통과,
     flutter build web --release 성공(build/web에 manifest.json·
     offline.html 없음 확인)
+  - 검사 1회차(reality-checker) NEEDS WORK: index.html이 서비스 워커를
+    먼저 해제해 버려 sw.js 정리용 코드가 실행되지 않고
+    woogyocheong-offline-v2 캐시가 남는 것을 재현으로 확인 → index.html
+    에서 woogyocheong-/flutter- 캐시도 직접 지우도록 수정. 보안 검토
+    제안에 따라 sw.js는 /__/ 경로 창(로그인 중일 수 있음)은 새로고침하지
+    않도록 수정
   - 커밋: webapp 브랜치(작업 사본, pwa에서 분기)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

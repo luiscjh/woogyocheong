@@ -27,6 +27,8 @@ self.addEventListener('activate', (event) => {
       await self.registration.unregister();
       const clients = await self.clients.matchAll({ type: 'window' });
       for (const client of clients) {
+        // Firebase 예약 경로(/__/auth 등)의 창·iframe은 로그인 중일 수 있어 건드리지 않는다.
+        if (new URL(client.url).pathname.startsWith('/__/')) continue;
         client.navigate(client.url);
       }
     })()
