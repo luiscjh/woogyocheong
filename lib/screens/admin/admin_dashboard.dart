@@ -191,7 +191,8 @@ class AdminDashboard extends StatelessWidget {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BannerManagementScreen())),
             ),
           ],
-          if (auth.isAdmin) ...[
+          // 리더 명단 최신화는 관리자 전용 — 목사님 관리 메뉴에서는 숨김
+          if (auth.isAdmin && !auth.isPastor) ...[
             const SizedBox(height: 12),
             _AdminMenuCard(
               icon: Icons.sync_alt_outlined,
