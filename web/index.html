@@ -1,4 +1,4 @@
-<!DOCTYPE html><html><head>
+<!DOCTYPE html><html lang="ko"><head>
   <!--
     If you are serving your web app in a path other than the root, change the
     href value below to reflect the base path you are serving from.
@@ -16,16 +16,19 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="우리 교회 청년부 앱 - 출석, 회비, 심방 신청과 공지를 한곳에서">
+  <meta name="theme-color" content="#3F51B5">
+  <meta name="application-name" content="우교청">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="우교청">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
 
   <title>우교청</title>
   <link rel="manifest" href="manifest.json">
@@ -111,6 +114,18 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async=""></script>
+  <script>
+    // 우교청 PWA 서비스 워커 등록 (설치 가능 조건 + 오프라인 안내 페이지).
+    // updateViaCache: 'none' — sw.js 업데이트 확인 시 HTTP 캐시를 쓰지 않아
+    // 새 배포의 워커를 바로 받는다. 캐시 전략은 web/sw.js 주석 참고.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker
+          .register('sw.js', { updateViaCache: 'none' })
+          .catch(function (e) { console.warn('서비스 워커 등록 실패:', e); });
+      });
+    }
+  </script>
 
 
 </body></html>
