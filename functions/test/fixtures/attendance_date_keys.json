@@ -1,0 +1,12 @@
+{
+  "_comment": "UTC 시각 → 그 순간의 한국(KST) 날짜 키. functions/test/kst.test.ts와 test/push_test.dart(AttendanceModel.dateKey)가 함께 사용",
+  "cases": [
+    { "utc": "2026-11-15T02:00:00Z", "key": "2026-11-15", "weekday": 0, "note": "일요일 11:00 KST(알림 발송 시각)" },
+    { "utc": "2026-11-14T15:00:00Z", "key": "2026-11-15", "weekday": 0, "note": "일요일 00:00 KST — UTC로는 아직 토요일" },
+    { "utc": "2026-11-14T14:59:59Z", "key": "2026-11-14", "weekday": 6, "note": "토요일 23:59:59 KST" },
+    { "utc": "2026-11-15T14:59:59Z", "key": "2026-11-15", "weekday": 0, "note": "일요일 23:59:59 KST" },
+    { "utc": "2026-11-15T15:00:00Z", "key": "2026-11-16", "weekday": 1, "note": "월요일 00:00 KST" },
+    { "utc": "2026-12-31T15:30:00Z", "key": "2027-01-01", "weekday": 5, "note": "연도 바뀜 + 한 자리 월/일 0 채움" },
+    { "utc": "2027-02-28T16:00:00Z", "key": "2027-03-01", "weekday": 1, "note": "2월 말 → 3월" }
+  ]
+}

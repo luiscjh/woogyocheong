@@ -1,0 +1,29 @@
+{
+  "name": "woogyocheong-functions",
+  "private": true,
+  "description": "우교청 푸시 알림/예약 작업 (Cloud Functions 2nd gen)",
+  "main": "lib/src/index.js",
+  "engines": {
+    "node": "24"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc -p tsconfig.json",
+    "test:unit": "npm run build && node --test lib/test/kst.test.js lib/test/members.test.js",
+    "test:emulator": "npm run build && node --test --test-concurrency=1 lib/test/handlers.test.js lib/test/rules.test.js",
+    "test:functions-emulator": "npm run build && node --test lib/test/triggers.test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.1",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.39.0",
+    "firebase": "^13.3.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.2"
+  }
+}
