@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/user_model.dart';
 import 'demo_data.dart';
 import 'firestore_service.dart';
+import 'push_service.dart';
 
 class AuthService {
   FirebaseAuth get _auth => FirebaseAuth.instance;
@@ -149,6 +150,9 @@ class AuthService {
       ));
     }
 
+    // 이 기기의 푸시 토큰부터 정리(본인 확인을 마친 뒤, 인증 계정 삭제 전). 다른
+    // 기기의 토큰은 회원 문서 삭제 시 Cloud Function(onUserDeleted)이 지움
+    await PushService.instance.unregister();
     await _firestore.collection('users').doc(user.uid).delete();
     try {
       await user.delete();

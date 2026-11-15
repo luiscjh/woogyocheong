@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/demo_data.dart';
+import '../services/push_service.dart';
 import '../services/firestore_service.dart' show demoMode;
 import '../utils/constants.dart';
 
@@ -83,11 +84,13 @@ class AuthProvider extends ChangeNotifier {
         if (firebaseUser == null) {
           _currentUser = null;
           _status = AuthStatus.unauthenticated;
+          PushService.instance.detach();
         } else {
           _currentUser = await _authService.getCurrentUserModel();
           _status = _currentUser != null
               ? AuthStatus.authenticated
               : AuthStatus.unauthenticated;
+          _registerPush();
         }
         notifyListeners();
       });
@@ -112,6 +115,7 @@ class AuthProvider extends ChangeNotifier {
       }
       _status = AuthStatus.authenticated;
       notifyListeners();
+      _registerPush();
       return true;
     } on Exception catch (e) {
       _error = _parseAuthError(e.toString());
@@ -128,7 +132,16 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 로그인된 회원이 있으면 이 기기의 푸시 토큰을 등록(Android/iOS만, 웹·데모 제외).
+  // 권한 요청 창을 기다리느라 화면 전환이 늦어지지 않게 결과를 기다리지 않음
+  void _registerPush() {
+    final uid = _currentUser?.uid;
+    if (uid != null) PushService.instance.register(uid);
+  }
+
   Future<void> signOut() async {
+    // 아직 로그인 상태일 때 이 기기 토큰 문서를 지워야 규칙(본인만 삭제)을 통과함
+    await PushService.instance.unregister();
     await _authService.signOut();
     _currentUser = null;
     _status = AuthStatus.unauthenticated;
@@ -143,6 +156,7 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = await _authService.signInWithGoogle();
       _status = _currentUser != null ? AuthStatus.authenticated : AuthStatus.unauthenticated;
       notifyListeners();
+      _registerPush();
       return _currentUser != null;
     } on Exception catch (e) {
       _error = _parseAuthError(e.toString());

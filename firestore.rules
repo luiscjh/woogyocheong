@@ -206,6 +206,27 @@ service cloud.firestore {
         isOwner(uid);
     }
 
+    // ── users/{uid}/fcmTokens/{token}: 푸시 알림(FCM) 기기 토큰(34차 작업) ──
+    // 앱(lib/services/push_service.dart)이 로그인 후 이 기기 토큰을 저장하고
+    // 로그아웃·탈퇴 때 지운다. 발송·만료 정리는 Cloud Functions(Admin SDK, 규칙
+    // 미적용)가 한다. 토큰은 기기 식별자라 본인만 읽고 쓸 수 있다 — 위 users
+    // 문서의 "로그인했으면 읽기 허용"은 하위 컬렉션에 적용되지 않음.
+    // 문서 id = 토큰 값, 필드는 {token, platform, updatedAt}만 허용하고
+    // updatedAt은 서버 시각(FieldValue.serverTimestamp())이어야 함(60일 정리 기준)
+    function validFcmToken(tokenId) {
+      return request.resource.data.keys().hasOnly(['token', 'platform', 'updatedAt']) &&
+        request.resource.data.keys().hasAll(['token', 'platform', 'updatedAt']) &&
+        request.resource.data.token is string &&
+        request.resource.data.token == tokenId &&
+        request.resource.data.token.size() > 0 && request.resource.data.token.size() <= 1024 &&
+        request.resource.data.platform in ['android', 'ios'] &&
+        request.resource.data.updatedAt == request.time;
+    }
+    match /users/{uid}/fcmTokens/{tokenId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isRegistered() && validFcmToken(tokenId);
+    }
+
     // ── positions (자리: 소팀장/중팀장/임원팀) ──────────────────────────
     // capacity==1(단일석)이면 holderUids는 0~1명만 허용. capacity==null(다인석,
     // 임원팀·새가족팀 리더)은 인원 제한을 두지 않는다

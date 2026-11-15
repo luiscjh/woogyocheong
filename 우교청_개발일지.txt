@@ -2622,3 +2622,70 @@
     것을 크롬에서 확인
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[36차 작업] 2026-11-15
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 푸시 알림(FCM) + 예약 작업(Cloud Functions 2세대) 추가 — 배포 안 함
+  - 배경: 인앱 알림을 앱 푸시로도 받고, 심방 신청을 목사님께 바로
+    알리고, 주일 출석 알림과 오래된 데이터 정리를 자동화하려는 요청.
+    Blaze 요금제 전환 전이라 코드·에뮬레이터 검증까지만 진행. 작업
+    사본 push 브랜치(webapp에서 분기), 원본 폴더·배포 변경 없음
+  - 수신 대상: Android/iOS 앱만. 웹은 서비스 워커 없는 운영 방침을
+    지키기 위해 푸시 제외 — 메시징 코드는 kIsWeb·demoMode에서 아무것도
+    하지 않고, web/index.html에 flutterfire_ignore_scripts=['messaging']
+    을 넣어 웹에서 Firebase Messaging JS 자체를 받지 않게 함
+  - 앱(lib/services/push_service.dart 신규): 로그인 후 알림 권한 요청
+    (Android 13+ POST_NOTIFICATIONS, iOS), 토큰을 users/{uid}/fcmTokens/
+    {토큰}에 {token, platform, updatedAt(서버 시각)}로 저장, 토큰 갱신
+    반영, 로그아웃·회원 탈퇴 직전에 이 기기 토큰 문서 삭제 + FCM 토큰
+    폐기. 앱이 열려 있을 때 받은 푸시는 SnackBar로 표시(새 패키지는
+    firebase_messaging 15.2.10 하나 — 기존 firebase_core 3.15.2와 호환)
+  - iOS: Info.plist에 UIBackgroundModes remote-notification 추가.
+    Apple 개발자 계정·APNs 키가 없는 지금은 APNs 토큰이 없으므로 몇 초
+    기다린 뒤 조용히 건너뜀(앱 사용에는 영향 없음). Push 권한(entitlement)
+    은 Xcode에서 팀 지정 후 추가해야 함
+  - Cloud Functions(functions/, TypeScript, 리전 asia-northeast3,
+    Node 24):
+    · pushOnNotificationCreated: notifications 문서 생성 → 그 사용자
+      기기로 발송. 등록 해제/잘못된 토큰만 삭제(일시 오류는 유지).
+      트리거 중복 전달 대비로 발송 전에 pushedAt을 트랜잭션으로 기록
+    · notifyPastorsOnVisitCreated: 심방 신청 → 목사님마다 알림 문서
+      (type visitRequest, 문서 id visitRequest_{신청id}_{목사님uid})를
+      서버가 생성. 푸시는 그 문서가 위 함수를 트리거해 한 번만 나감.
+      본문은 "OOO님이 심방을 신청했습니다."만(연락처·사유 제외, 이름은
+      신청 문서가 아니라 users 문서에서 읽음)
+    · weeklyAttendanceReminder: 매주 일 11:00(Asia/Seoul). 오늘(KST)
+      출석 문서(userId_yyyy-MM-dd, 출석/결석 무관)가 없는 대상자에게만
+      직접 푸시(알림함 문서 없음). 대상 = 목사님 제외, 소속팀 없는
+      (온보딩 미완료) 회원 제외, testing@church.com 제외, 기수 이용
+      제한 대상 제외(앱이 출석 버튼을 막음). 비활성 플래그는 모델에
+      없음. 같은 날 재실행 방지 기록 jobRuns/attendanceReminder_{날짜}
+    · dailyCleanup: 매일 03:00. leaderRosterUploads expiresAt 지난 것,
+      90일 지난 notifications, updatedAt 60일 지난 fcmTokens(컬렉션
+      그룹), 90일 지난 jobRuns를 300개씩 나눠 삭제
+    · deleteTokensOnUserDeleted: 회원 문서 삭제 시 그 회원 토큰 전부 삭제
+  - firestore.rules: users/{uid}/fcmTokens/{tokenId} 규칙만 추가(본인만
+    읽기/쓰기/삭제, 필드 3개 고정, id=token, platform android/ios,
+    updatedAt=request.time, 토큰 1024자 이하, 생성·수정은 회원 문서가
+    있을 때만). 기존 규칙은 한 줄도 바꾸지 않음(diff에 삭제 줄 0)
+  - firestore.indexes.json: fcmTokens.updatedAt 컬렉션 그룹 단일 필드
+    색인(60일 토큰 정리 쿼리용). firebase.json: functions 설정과
+    에뮬레이터 포트(원본 폴더 에뮬레이터가 8080/4400/4500/9150을 쓰고
+    있어 firestore 8181, hub 4410, logging 4510, functions 5101로 변경)
+  - 검증: flutter analyze "No issues found!", flutter test 18건 통과
+    (신규 5건: 푸시 지원 플랫폼, 토큰 문서 필드=규칙, 서버 KST 날짜
+    키=AttendanceModel.dateKey). functions lint·build 통과, 단위 테스트
+    5건, Firestore 에뮬레이터 테스트 15건(함수 로직 9 + 규칙 6), 함수
+    에뮬레이터 통합 테스트 3건 통과(가짜 FCM, 실제 발송 없음).
+    flutter build web --release / apk --debug / ios --release
+    --no-codesign 성공. 웹 빌드를 로컬 서버로 띄워 크롬에서 서비스 워커
+    등록 0개, firebase-messaging 스크립트 미로딩, 로그인 화면 정상 확인
+  - 미검증/남은 일: 실제 기기 푸시 수신(배포·Blaze 필요), iOS는 개발자
+    계정·APNs 키·Push 권한 추가 후 확인 필요. 예약 함수는 에뮬레이터에서
+    스케줄로 실행되지 않아 같은 처리 함수를 직접 호출해 검증함.
+    개인정보처리방침에 기기 토큰 수집·알림 90일 보관 문구 반영 필요(초안만)
+  - 커밋: push 브랜치(작업 사본)에만 커밋, push·배포 안 함
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
