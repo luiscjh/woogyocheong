@@ -10,6 +10,7 @@ import 'screens/auth/onboarding_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'services/demo_data.dart';
 import 'services/firestore_service.dart' show demoMode;
+import 'services/push_service.dart';
 import 'utils/theme.dart';
 
 void main() async {
@@ -37,6 +38,8 @@ class ChurchYouthApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: '우교청',
+        // 앱이 열려 있을 때 받은 푸시를 SnackBar로 표시(PushService)
+        scaffoldMessengerKey: PushService.instance.messengerKey,
         theme: buildAppTheme(),
         debugShowCheckedModeBanner: false,
         localizationsDelegates: GlobalMaterialLocalizations.delegates,

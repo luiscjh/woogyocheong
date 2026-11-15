@@ -558,8 +558,8 @@ class FirestoreService {
   }
 
   // ── Notifications (심방/목사 권한/새가족 로테이션/팀 배정 등 이벤트 알림) ──
-  // 지금은 인앱 알림함으로만 동작. Firebase 연결 후에는 이 알림 문서 생성을
-  // 감지하는 Cloud Function에서 FCM 푸시를 함께 보내도록 확장하면 됨
+  // 인앱 알림함 + 푸시: 알림 문서가 생성되면 Cloud Function(pushOnNotificationCreated)이
+  // 그 사용자의 기기 토큰(users/{uid}/fcmTokens)으로 FCM 푸시를 함께 보낸다
   Stream<List<NotificationModel>> streamUserNotifications(String userId) {
     if (demoMode) return _demo.streamUserNotifications(userId);
     return _db.collection('notifications')

@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 푸시 알림(FCM) — Android 13(API 33)+는 실행 중 권한 요청 필요(PushService.register) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="우교청"
         android:name="${applicationName}"

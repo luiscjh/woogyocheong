@@ -13,6 +13,9 @@ class NotificationScreen extends StatelessWidget {
     switch (type) {
       case 'visit':
         return Icons.favorite_border;
+      // 심방 신청 → 목사님 알림(Cloud Function notifyPastorsOnVisitCreated가 생성)
+      case 'visitRequest':
+        return Icons.volunteer_activism_outlined;
       case 'newFamilyRotation':
         return Icons.event_repeat_outlined;
       case 'teamAssignment':

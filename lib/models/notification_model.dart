@@ -2,14 +2,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 // 특정 이벤트(심방/목사 권한 신청 상태 변경, 새가족 로테이션 배정,
 // 소팀/중팀 배정 변경 등)가 발생했을 때 해당 사용자에게 남기는 알림.
-// 지금은 인앱 알림함으로 동작하고, 추후 Firebase 연결 시 이 레코드
-// 생성 시점에 FCM 푸시를 함께 보내도록 확장 가능
+// 인앱 알림함으로 동작하고, 이 문서가 생성되면 Cloud Function
+// (functions/src/index.ts pushOnNotificationCreated)이 같은 내용을 FCM 푸시로도
+// 보낸다(Android/iOS 앱). 서버가 발송 후 pushedAt 필드를 남김(앱은 읽지 않음)
 class NotificationModel {
   final String id;
   final String userId;
   final String title;
   final String body;
-  final String type; // visit / newFamilyRotation / teamAssignment
+  final String type; // visit / newFamilyRotation / teamAssignment / visitRequest
   final DateTime createdAt;
   final bool isRead;
 
