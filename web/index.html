@@ -1,4 +1,4 @@
-<!DOCTYPE html><html><head>
+<!DOCTYPE html><html lang="ko"><head>
   <!--
     If you are serving your web app in a path other than the root, change the
     href value below to reflect the base path you are serving from.
@@ -16,19 +16,17 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="우리 교회 청년부 앱 - 출석, 회비, 심방 신청과 공지를 한곳에서">
+  <meta name="theme-color" content="#3F51B5">
+  <meta name="application-name" content="우교청">
 
-  <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="우교청">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <!-- 홈 화면 바로가기/북마크 아이콘 (설치형 앱 모드는 쓰지 않음) -->
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
 
   <title>우교청</title>
-  <link rel="manifest" href="manifest.json">
   <style id="splash-screen-style">
     html {
       height: 100%
@@ -111,6 +109,28 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async=""></script>
+  <script>
+    // 우교청은 서비스 워커 없이 일반 웹사이트로 동작한다. 새로 배포하면
+    // 다음 접속에서 바로 반영되도록(firebase.json의 Cache-Control: no-cache와
+    // 함께), 예전에 등록된 서비스 워커(PWA용 sw.js, Flutter 기본
+    // flutter_service_worker.js)가 남아 있으면 모두 해제하고, 그 워커들이
+    // 만든 캐시도 지운다(해제가 먼저 되면 sw.js 정리용 코드가 실행될 기회가
+    // 없으므로 여기서 직접 지운다).
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) { reg.unregister(); });
+      }).catch(function () {});
+    }
+    if ('caches' in window) {
+      caches.keys().then(function (keys) {
+        keys.forEach(function (key) {
+          if (key.indexOf('woogyocheong-') === 0 || key.indexOf('flutter-') === 0) {
+            caches.delete(key);
+          }
+        });
+      }).catch(function () {});
+    }
+  </script>
 
 
 </body></html>
