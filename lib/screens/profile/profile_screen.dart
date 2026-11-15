@@ -371,31 +371,27 @@ class _RoleOption {
   // 사역팀(콘텐츠팀 등) 소속 여부 — department와 독립된 별도 축이므로 함께 관리
   final String ministryTeam;
   final bool isMinistryLead;
-  // role=executive일 때만 의미 있음(회장/부회장/총무/회계)
-  final String executiveTitle;
 
-  const _RoleOption(this.label, this.role, this.department,
-      {this.ministryTeam = '', this.isMinistryLead = false, this.executiveTitle = ''});
+  const _RoleOption(this.label, this.role, this.department, {this.ministryTeam = '', this.isMinistryLead = false});
 
-  String get key => '$role|$department|$ministryTeam|$isMinistryLead|$executiveTitle';
+  String get key => '$role|$department|$ministryTeam|$isMinistryLead';
 
+  // 임원팀 직책은 테스트 전환에서 다루지 않으므로 비교하지 않음(예전에 직책이
+  // 저장된 테스트 계정도 "임원팀"으로 표시됨)
   bool matches(UserModel u) =>
       role == u.role &&
       department == u.department &&
       ministryTeam == u.ministryTeam &&
-      isMinistryLead == u.isMinistryLead &&
-      executiveTitle == u.executiveTitle;
+      isMinistryLead == u.isMinistryLead;
 }
 
 const _testRoleOptions = [
   _RoleOption('팀원', UserRole.member, 'A-1'),
   _RoleOption('소팀장', UserRole.smallLeader, 'A-1'),
   _RoleOption('중팀장', UserRole.midLeader, 'A-0'),
-  // 임원팀은 모두 직책 필수 — QA에서 단일석/다인석을 모두 확인할 수 있도록 4개 모두 제공
-  _RoleOption('임원팀 회장', UserRole.executive, AppTeams.executiveTeam, executiveTitle: ExecutiveTitle.president),
-  _RoleOption('임원팀 부회장', UserRole.executive, AppTeams.executiveTeam, executiveTitle: ExecutiveTitle.vicePresident),
-  _RoleOption('임원팀 총무', UserRole.executive, AppTeams.executiveTeam, executiveTitle: ExecutiveTitle.secretary),
-  _RoleOption('임원팀 회계', UserRole.executive, AppTeams.executiveTeam, executiveTitle: ExecutiveTitle.treasurer),
+  // 임원팀 권한은 직책(회장/부회장/총무/회계)과 무관하게 role로만 정해지므로
+  // 테스트 전환에서는 직책 없이 "임원팀" 하나로 통합
+  _RoleOption('임원팀', UserRole.executive, AppTeams.executiveTeam),
   _RoleOption('목사님', UserRole.pastor, 'A-1'),
   _RoleOption('관리자', UserRole.admin, 'A-1'),
   _RoleOption('새가족', UserRole.member, AppTeams.newFamilyTeam),
@@ -475,7 +471,8 @@ class _TestRoleSwitcherSection extends StatelessWidget {
       department: option.department,
       ministryTeam: option.ministryTeam,
       isMinistryLead: option.isMinistryLead,
-      executiveTitle: option.executiveTitle,
+      // 임원팀은 직책 없이 전환(권한은 role로만 정해짐), 다른 역할은 원래 직책이 없음
+      executiveTitle: '',
       // 콘텐츠팀 팀원 상태를 벗어나면 위임받았던 배너 관리 권한도 함께 초기화
       bannerAccessGranted:
           option.ministryTeam == AppTeams.contentTeam && !option.isMinistryLead ? latest.bannerAccessGranted : false,

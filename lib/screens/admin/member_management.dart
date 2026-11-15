@@ -38,7 +38,8 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(readOnly ? '회원 조회' : '청년부 명단'),
+        // 목사님·관리자·임원팀은 '청년부 명단', 중팀장·소팀장은 '우리팀 명단'(관리 메뉴 카드와 동일)
+        title: Text(readOnly ? '회원 조회' : (authProvider.isExecutive ? '청년부 명단' : '우리팀 명단')),
         actions: readOnly
             ? null
             : [
@@ -331,7 +332,8 @@ class _LeaderAssignedFamilyView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('청년부 명단')),
+      // 새가족팀 리더(소팀장)는 관리 메뉴 카드와 같이 '우리팀 명단'
+      appBar: AppBar(title: const Text('우리팀 명단')),
       body: StreamBuilder<List<UserModel>>(
         stream: service.streamAllMembers(),
         builder: (ctx, memberSnap) {

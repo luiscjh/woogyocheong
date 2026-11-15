@@ -2425,3 +2425,49 @@
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[31차 작업] 2026-11-15
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 테스트 계정 역할 전환: 임원팀 세부 직책을 "임원팀" 하나로 통합
+  - 배경: "역할 전환에 임원팀 역할은 세부 역할 대신 그냥 임원팀으로
+    통합해줘"라는 요청
+  - lib/screens/profile/profile_screen.dart: _testRoleOptions의 '임원팀
+    회장/부회장/총무/회계' 4개를 '임원팀' 1개로 합침. 임원팀 권한은 직책과
+    무관하게 role로만 정해지므로(규칙·앱 모두 executiveTitle로 권한을 나누는
+    곳 없음 확인) 직책 없이 전환. _RoleOption에서 executiveTitle 필드를
+    없애고 matches()도 직책을 비교하지 않음 — 예전에 직책이 저장된 테스트
+    계정도 "임원팀"으로 표시되고, 역할을 전환하면 직책은 ''로 비워짐
+
+■ 관리 메뉴의 '청년부 명단' 이름을 역할별로 구분
+  - 배경: 22차 작업에서 '회원 관리' → '청년부 명단'으로 바꾼 이름이 모든
+    역할에 똑같이 보이던 것을 "'청년부 명단'은 목사님, 관리자, 임원팀에만
+    적용하고, 중팀장, 소팀장은 '우리팀 명단'으로" 요청
+  - admin_dashboard.dart 관리 메뉴 카드 제목과 member_management.dart의
+    AppBar 제목: auth.isExecutive(목사님·관리자·임원팀)면 '청년부 명단',
+    아니면 '우리팀 명단'. 새가족팀 리더 전용 화면(_LeaderAssignedFamilyView)
+    제목도 '우리팀 명단'. 콘텐츠팀장의 읽기 전용 '회원 조회'와 카드 부제목은
+    그대로
+
+■ 웹 주소 woogyochung.web.app 추가
+  - 배경: 웹앱을 여러 사람이 함께 쓰도록 하면서 "주소 이름은 일단
+    woogyochung으로" 요청(웹앱은 이미 conference-c9c99.web.app으로 공개
+    배포돼 있었음 — 로컬 서버는 검증용일 뿐)
+  - firebase hosting:sites:create woogyochung으로 같은 프로젝트에 Hosting
+    사이트 추가 → hosting:clone으로 기존 live 버전을 그대로 복사(배포된
+    main.dart.js가 기존 사이트와 같음 확인)
+  - firebase.json: hosting을 두 사이트(conference-c9c99, woogyochung) 배열로
+    바꿔 이후 firebase deploy --only hosting 한 번에 두 주소가 함께 갱신되게 함
+  - 사용자가 Firebase 콘솔 Authentication → 승인된 도메인에
+    woogyochung.web.app 추가 완료(이게 없으면 새 주소에서 Google 로그인 실패)
+  - 앱 안의 개인정보처리방침 링크(constants.dart)와 스토어 등록용 주소는
+    아직 conference-c9c99.web.app 그대로(기존 주소도 계속 동작)
+
+■ 검증
+  - flutter analyze 이슈 없음, flutter test 13건 통과, iOS 시뮬레이터 재기동.
+    역할별 화면은 테스트 계정 로그인이 필요해 직접 확인하지 못함
+  - 안드로이드 태블릿(R54X800ZWKP) 설치는 실패 — 태블릿에서 USB 디버깅을
+    허용했다고 했지만 adb가 계속 unauthorized(adb 서버 재시작·reconnect·
+    샌드박스 밖 실행 모두 동일). 릴리스 APK(63.1MB)는 빌드돼 있음. 태블릿에
+    우교청 앱이 2개 설치돼 있어 최신 하나만 남겨 달라는 요청도 함께 이월
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
