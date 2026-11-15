@@ -58,7 +58,13 @@ class _RootRouter extends StatelessWidget {
       case app_auth.AuthStatus.loading:
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       case app_auth.AuthStatus.authenticated:
-        return authProvider.needsOnboarding ? const OnboardingScreen() : const HomeScreen();
+        if (authProvider.needsOnboarding) return const OnboardingScreen();
+        // 역할·소속이 바뀌면(테스트 계정 역할 변경, 역할 양도 등) 홈 화면을 새로
+        // 만들어, 이전 역할 기준으로 남아 있던 탭 선택·각 탭 화면 상태를 버림
+        final u = authProvider.currentUser!;
+        return HomeScreen(
+          key: ValueKey('${u.uid}|${u.role}|${u.department}|${u.ministryTeam}|${u.isMinistryLead}|${u.bannerAccessGranted}'),
+        );
       case app_auth.AuthStatus.unauthenticated:
         return const LoginScreen();
     }

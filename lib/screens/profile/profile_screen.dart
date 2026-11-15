@@ -401,11 +401,23 @@ const _testRoleOptions = [
   _RoleOption('콘텐츠팀 팀장', UserRole.member, 'A-1', ministryTeam: AppTeams.contentTeam, isMinistryLead: true),
 ];
 
-// 테스트 전용 계정(testing@church.com)이 관리자~팀원 및 새가족 관련 역할을 즉시 오갈 수 있는 섹션
-class _TestRoleSwitcherSection extends StatelessWidget {
+// 테스트 전용 계정(testing@church.com)이 관리자~팀원 및 새가족 관련 역할을 오갈 수 있는 섹션.
+// 드롭다운에서 고르기만 해서는 바뀌지 않고, "변경" 버튼을 눌러야 반영됨
+class _TestRoleSwitcherSection extends StatefulWidget {
   final UserModel user;
 
   const _TestRoleSwitcherSection({required this.user});
+
+  @override
+  State<_TestRoleSwitcherSection> createState() => _TestRoleSwitcherSectionState();
+}
+
+class _TestRoleSwitcherSectionState extends State<_TestRoleSwitcherSection> {
+  // 드롭다운에서 고른(아직 반영 전인) 역할. null이면 현재 역할 그대로
+  String? _pendingKey;
+  bool _isSaving = false;
+
+  UserModel get user => widget.user;
 
   // 정확히 일치하는 옵션이 없으면 role+department, 그다음 role만 일치하는
   // 옵션으로 순서대로 완화하며 찾고, 그마저 없으면 첫 옵션을 기본값으로 사용
@@ -424,6 +436,9 @@ class _TestRoleSwitcherSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedKey = _pendingKey ?? _currentOption.key;
+    final selected = _testRoleOptions.firstWhere((o) => o.key == selectedKey);
+    final canApply = !_isSaving && !selected.matches(user);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -443,45 +458,73 @@ class _TestRoleSwitcherSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _currentOption.key,
-            decoration: const InputDecoration(labelText: '현재 역할', isDense: true, border: OutlineInputBorder()),
-            items: _testRoleOptions
-                .map((o) => DropdownMenuItem(value: o.key, child: Text(o.label)))
-                .toList(),
-            onChanged: (v) => _switchRole(context, v),
+          Text('현재 역할: ${_currentOption.label}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: selectedKey,
+                  decoration: const InputDecoration(labelText: '변경할 역할', isDense: true, border: OutlineInputBorder()),
+                  items: _testRoleOptions
+                      .map((o) => DropdownMenuItem(value: o.key, child: Text(o.label)))
+                      .toList(),
+                  onChanged: _isSaving ? null : (v) => setState(() => _pendingKey = v),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: canApply ? () => _switchRole(selected) : null,
+                child: _isSaving
+                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('변경'),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Future<void> _switchRole(BuildContext context, String? key) async {
-    if (key == null) return;
-    final option = _testRoleOptions.firstWhere((o) => o.key == key);
+  Future<void> _switchRole(_RoleOption option) async {
     if (option.matches(user)) return;
+    setState(() => _isSaving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final nav = Navigator.of(context);
+    final auth = context.read<AuthProvider>();
 
     final service = FirestoreService();
-    // AuthProvider에 캐시된 user는 다른 화면(예: 회원 관리에서 관리자가 본인
-    // 계정에 직접 부여한 배너 관리 권한 공유)에서 바뀐 최신 값을 반영하지
-    // 못할 수 있으므로, 역할 전환 시 최신 레코드를 다시 조회해 그 값을 기반으로 덮어씀
-    final latest = await service.getUser(user.uid) ?? user;
-    final updated = latest.copyWith(
-      role: option.role,
-      department: option.department,
-      ministryTeam: option.ministryTeam,
-      isMinistryLead: option.isMinistryLead,
-      // 임원팀은 직책 없이 전환(권한은 role로만 정해짐), 다른 역할은 원래 직책이 없음
-      executiveTitle: '',
-      // 콘텐츠팀 팀원 상태를 벗어나면 위임받았던 배너 관리 권한도 함께 초기화
-      bannerAccessGranted:
-          option.ministryTeam == AppTeams.contentTeam && !option.isMinistryLead ? latest.bannerAccessGranted : false,
-    );
-    await service.updateUser(updated, previousDepartment: latest.department, notify: false);
-    if (!context.mounted) return;
-    context.read<AuthProvider>().setCurrentUser(updated);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('역할을 ${option.label}(으)로 전환했습니다.'), backgroundColor: AppColors.success),
+    final UserModel updated;
+    try {
+      // AuthProvider에 캐시된 user는 다른 화면(예: 회원 관리에서 관리자가 본인
+      // 계정에 직접 부여한 배너 관리 권한 공유)에서 바뀐 최신 값을 반영하지
+      // 못할 수 있으므로, 역할 전환 시 최신 레코드를 다시 조회해 그 값을 기반으로 덮어씀
+      final latest = await service.getUser(user.uid) ?? user;
+      updated = latest.copyWith(
+        role: option.role,
+        department: option.department,
+        ministryTeam: option.ministryTeam,
+        isMinistryLead: option.isMinistryLead,
+        // 임원팀은 직책 없이 전환(권한은 role로만 정해짐), 다른 역할은 원래 직책이 없음
+        executiveTitle: '',
+        // 콘텐츠팀 팀원 상태를 벗어나면 위임받았던 배너 관리 권한도 함께 초기화
+        bannerAccessGranted:
+            option.ministryTeam == AppTeams.contentTeam && !option.isMinistryLead ? latest.bannerAccessGranted : false,
+      );
+      await service.updateUser(updated, previousDepartment: latest.department, notify: false);
+    } catch (e) {
+      if (mounted) setState(() => _isSaving = false);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('역할 변경에 실패했습니다. 다시 시도해 주세요.'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+    // 첫 화면으로 돌아간 뒤 세션을 갱신 — 홈 화면이 역할 키로 다시 만들어져
+    // 탭 구성과 각 탭 화면이 새 역할 기준으로 처음부터 그려짐(main.dart 참고)
+    nav.popUntil((r) => r.isFirst);
+    auth.setCurrentUser(updated);
+    messenger.showSnackBar(
+      SnackBar(content: Text('역할을 ${option.label}(으)로 변경했습니다.'), backgroundColor: AppColors.success),
     );
   }
 }
