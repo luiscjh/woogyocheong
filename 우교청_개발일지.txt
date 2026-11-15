@@ -2689,3 +2689,24 @@
   - 커밋: push 브랜치(작업 사본)에만 커밋, push·배포 안 함
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[37차 작업] 2026-11-15
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 푸시 사용 스위치(pushEnabled) 추가 — 지금은 꺼 둠
+  - 배경: 36차 푸시 코드는 main에 머지·GitHub push까지 됐지만, "지금 당장
+    비용이 들어가는 작업은 진행하지 않는다"는 결정으로 Blaze 전환과
+    functions 배포를 보류. 이 상태로 모바일 앱을 다시 빌드하면 푸시는 오지
+    않는데 로그인 때 알림 권한만 묻고, fcmTokens 규칙도 미배포라 토큰
+    저장이 실패함
+  - lib/services/push_service.dart: const bool pushEnabled = false 추가,
+    PushService.isSupported가 이 값이 false면 항상 false → register/
+    unregister/detach 모두 아무것도 하지 않음(권한 요청·토큰 저장 없음)
+  - test/push_test.dart: 스위치가 꺼져 있으면 등록하지 않는지 확인하는
+    테스트 추가
+  - 켜는 순서(Blaze 전환 후): firestore:rules·indexes 배포 → functions
+    배포 → pushEnabled = true로 바꿔 앱 빌드·배포
+  - Firebase 배포는 비용 방지를 위해 항상 --only hosting 등 대상을 지정
+    (firebase.json에 functions 블록이 있어 대상 없이 배포하면 functions도
+    시도함)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

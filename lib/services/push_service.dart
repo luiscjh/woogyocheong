@@ -7,6 +7,11 @@ import 'package:flutter/material.dart';
 
 import 'firestore_service.dart' show demoMode;
 
+// 푸시 사용 스위치 — 지금은 꺼 둠. 발송을 맡는 Cloud Functions는 Blaze(유료)
+// 요금제가 필요해 아직 배포하지 않았으므로, 켜 두면 푸시는 오지 않는데 알림 권한만
+// 묻게 된다. Blaze 전환 후 firestore 규칙·색인과 functions를 배포한 다음 true로 바꿀 것
+const bool pushEnabled = false;
+
 // 푸시 알림(FCM) 수신 등록 — Android/iOS 앱에서만 동작한다.
 // - 웹은 일부러 제외: 웹 푸시는 서비스 워커가 필요한데, 웹 빌드는 서비스
 //   워커 없이 운영하기로 했다(web/index.html이 남은 워커를 전부 해제함).
@@ -36,7 +41,7 @@ class PushService {
   }
 
   static bool get isSupported =>
-      isSupportedFor(isWeb: kIsWeb, demo: demoMode, platform: defaultTargetPlatform);
+      pushEnabled && isSupportedFor(isWeb: kIsWeb, demo: demoMode, platform: defaultTargetPlatform);
 
   // users/{uid}/fcmTokens/{token} 문서 내용 — firestore.rules의 validFcmToken()과
   // 필드가 정확히 같아야 함(추가 필드를 넣으면 규칙에서 거부됨)

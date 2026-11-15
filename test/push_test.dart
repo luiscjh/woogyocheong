@@ -8,6 +8,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  // Functions(Blaze 필요)를 배포하기 전까지는 꺼 둠 — 켜면 이 테스트도 같이 바꿀 것
+  test('푸시 스위치가 꺼져 있으면 어떤 플랫폼에서도 등록하지 않음', () {
+    expect(pushEnabled, isFalse);
+    expect(PushService.isSupported, isFalse);
+  });
+
   group('PushService.isSupportedFor', () {
     test('Android/iOS 앱에서만 사용', () {
       expect(PushService.isSupportedFor(isWeb: false, demo: false, platform: TargetPlatform.android), isTrue);
