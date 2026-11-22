@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/cleanup_service.dart';
 import '../services/demo_data.dart';
 import '../services/push_service.dart';
 import '../services/firestore_service.dart' show demoMode;
@@ -90,7 +91,7 @@ class AuthProvider extends ChangeNotifier {
           _status = _currentUser != null
               ? AuthStatus.authenticated
               : AuthStatus.unauthenticated;
-          _registerPush();
+          _afterSignIn();
         }
         notifyListeners();
       });
@@ -115,7 +116,7 @@ class AuthProvider extends ChangeNotifier {
       }
       _status = AuthStatus.authenticated;
       notifyListeners();
-      _registerPush();
+      _afterSignIn();
       return true;
     } on Exception catch (e) {
       _error = _parseAuthError(e.toString());
@@ -132,11 +133,14 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 로그인된 회원이 있으면 이 기기의 푸시 토큰을 등록(Android/iOS만, 웹·데모 제외).
-  // 권한 요청 창을 기다리느라 화면 전환이 늦어지지 않게 결과를 기다리지 않음
-  void _registerPush() {
-    final uid = _currentUser?.uid;
-    if (uid != null) PushService.instance.register(uid);
+  // 로그인된 회원이 있으면 이 기기의 푸시 토큰을 등록(Android/iOS만, 웹·데모 제외)하고
+  // 보관 기간이 지난 기록을 정리. 권한 요청 창·정리 작업을 기다리느라 화면 전환이
+  // 늦어지지 않게 결과를 기다리지 않음
+  void _afterSignIn() {
+    final user = _currentUser;
+    if (user == null) return;
+    PushService.instance.register(user.uid);
+    CleanupService.instance.run(uid: user.uid, isAdmin: user.isAdmin);
   }
 
   Future<void> signOut() async {
@@ -156,7 +160,7 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = await _authService.signInWithGoogle();
       _status = _currentUser != null ? AuthStatus.authenticated : AuthStatus.unauthenticated;
       notifyListeners();
-      _registerPush();
+      _afterSignIn();
       return _currentUser != null;
     } on Exception catch (e) {
       _error = _parseAuthError(e.toString());

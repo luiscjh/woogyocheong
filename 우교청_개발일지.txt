@@ -2763,3 +2763,27 @@
     (functions/src/handlers.ts의 TOKEN_STALE_DAYS·NOTIFICATION_RETENTION_DAYS
     와 일치 확인). 기기 설정에서 알림 끄기 안내 추가
   - 시행일(2026-10-11)과 [대괄호] 자리(교회 이름·책임자·연락처)는 그대로
+
+■ 보관 기간 자동 삭제를 앱이 대신 수행(무료, Spark 유지)
+  - 배경: 자동 삭제(알림 90일, 리더 명단 원본 30일)는 Cloud Functions
+    dailyCleanup(예약 실행 → Cloud Scheduler)이나 Firestore TTL이 필요한데
+    둘 다 Blaze 필요(30차 TTL 403 확인). "앱이 지우는 무료 방식으로" 요청
+  - lib/services/cleanup_service.dart(신규): 로그인 후(_afterSignIn — 기존
+    _registerPush를 이름 바꿔 푸시 등록 + 정리) 세션당 한 번, 기다리지 않고
+    실행. ① 본인 알림 중 91일 지난 것 삭제(userId 조건만으로 조회 후 앱에서
+    날짜 필터 — 새 색인 불필요, 기기 시계 오차 대비 규칙보다 하루 여유)
+    ② 관리자(admin·pastor)면 expiresAt 지난 leaderRosterUploads 삭제.
+    500개씩 batch, 실패하면 조용히 넘기고 다음 로그인 때 재시도
+  - 한계: 기간이 되는 날이 아니라 기간이 지난 뒤 처음 로그인할 때 지워짐.
+    탈퇴한 회원의 알림은 지울 사람이 없어 기존 운영 기록 기준(탈퇴 후 1년,
+    책임자가 콘솔에서 삭제)을 따름. 기기 토큰 60일 정리는 푸시를 켤 때
+    필요하므로 이번에 넣지 않음
+  - firestore.rules: notifications delete를 false →
+    "본인 && createdAt < request.time - 90일"로 변경. leaderRosterUploads
+    주석의 TTL 설명 수정(규칙 자체는 그대로 — 원래 관리자 삭제 허용)
+  - 개인정보처리방침: 앱 내 알림 90일 자동 삭제를 푸시 조건 없이 안내
+    (탈퇴 회원 알림은 운영 기록 기준), Cloud Functions 위탁 항목에서
+    "자동 삭제" 제거(지금은 앱이 수행)
+  - 검증: flutter analyze "No issues found!", flutter test 20건(신규 1:
+    91일 기준), 에뮬레이터 규칙·함수 테스트 전부 통과(신규 2: 본인 90일
+    지난 알림만 삭제 허용, 남의 알림은 목사님도 삭제 거부)

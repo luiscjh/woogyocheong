@@ -103,3 +103,28 @@ describe("기존 규칙 회귀 확인(변경 없음)", () => {
     await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), "users/alice")));
   });
 });
+
+describe("notifications 삭제(보관 기간 정리)", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      const at = (days: number) => Timestamp.fromMillis(Date.now() - days * DAY);
+      await setDoc(doc(db, "notifications/old"), { userId: "alice", title: "t", body: "b", type: "x", createdAt: at(91), isRead: true });
+      await setDoc(doc(db, "notifications/recent"), { userId: "alice", title: "t", body: "b", type: "x", createdAt: at(89), isRead: true });
+      await setDoc(doc(db, "notifications/bobOld"), { userId: "bob", title: "t", body: "b", type: "x", createdAt: at(91), isRead: true });
+    });
+  });
+
+  test("본인: 90일 지난 알림만 삭제 허용", async () => {
+    const db = alice();
+    await assertSucceeds(deleteDoc(doc(db, "notifications/old")));
+    await assertFails(deleteDoc(doc(db, "notifications/recent")));
+  });
+
+  test("다른 회원·목사님: 90일 지났어도 삭제 거부", async () => {
+    await assertFails(deleteDoc(doc(env.authenticatedContext("alice").firestore(), "notifications/bobOld")));
+    await assertFails(deleteDoc(doc(env.authenticatedContext("pastor").firestore(), "notifications/bobOld")));
+    await assertFails(deleteDoc(doc(env.unauthenticatedContext().firestore(), "notifications/bobOld")));
+  });
+});

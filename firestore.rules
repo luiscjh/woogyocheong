@@ -240,8 +240,8 @@ service cloud.firestore {
     }
 
     // ── leaderRosterUploads: 리더 명단 엑셀 업로드 시 원본 파일을 30일간
-    // 보관(Firestore TTL로 expiresAt 지난 문서 자동 삭제, Storage는 Spark
-    // 요금제라 미사용) — 관리자만 접근
+    // 보관(expiresAt 지난 문서는 관리자가 로그인할 때 앱이 삭제 — TTL 정책은
+    // Blaze 필요, Storage는 Spark 요금제라 미사용) — 관리자만 접근
     match /leaderRosterUploads/{id} {
       allow read, create, delete: if isAdmin();
     }
@@ -293,7 +293,10 @@ service cloud.firestore {
       // 다른 사람에게 알림을 보내는 것은 항상 소팀장 이상의 동작(심방 승인, 팀
       // 배정, 새가족 로테이션 배정 등)에서만 발생함
       allow create: if isSmallLeader();
-      allow delete: if false;
+      // 보관 기간(90일) 정리 — 앱이 로그인 때 본인 것 중 90일 지난 알림만 지움
+      // (lib/services/cleanup_service.dart). 그 전에는 본인도 지울 수 없음
+      allow delete: if isOwner(resource.data.userId)
+        && resource.data.createdAt < request.time - duration.value(90, 'd');
     }
 
     // ── banners ────────────────────────────────────────────────────
