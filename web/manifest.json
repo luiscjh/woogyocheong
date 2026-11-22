@@ -1,0 +1,41 @@
+{
+    "id": "/",
+    "name": "우교청 - 우리 교회 청년부",
+    "short_name": "우교청",
+    "description": "우리 교회 청년부 앱 - 출석, 회비, 심방 신청과 공지를 한곳에서",
+    "lang": "ko",
+    "dir": "ltr",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#F5F5F5",
+    "theme_color": "#3F51B5",
+    "categories": ["lifestyle", "social", "productivity"],
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

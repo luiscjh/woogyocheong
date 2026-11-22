@@ -20,7 +20,12 @@
   <meta name="theme-color" content="#3F51B5">
   <meta name="application-name" content="우교청">
 
-  <!-- 홈 화면 바로가기/북마크 아이콘 (설치형 앱 모드는 쓰지 않음) -->
+  <!-- 설치형 웹앱(크롬 "앱 설치", iOS "홈 화면에 추가") — 서비스 워커 없이 manifest만 사용 -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="우교청">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 
   <!-- Favicon -->
@@ -136,6 +141,44 @@
         });
       }).catch(function () {});
     }
+  </script>
+  <script>
+    // 새 배포 감지. 설치형으로 실행하면 앱을 닫지 않고 백그라운드에 두었다가 다시
+    // 여는 일이 많아, 페이지가 새로 로드되지 않고 옛 버전이 계속 떠 있을 수 있다.
+    // 화면으로 돌아올 때와 보고 있는 동안 5분마다 main.dart.js의 ETag만(HEAD, 본문
+    // 없음) 확인해, 처음 받은 값과 달라지면 앱(lib/utils/web_update/web_update_web.dart)에
+    // 알려 "새로고침" 안내를 띄운다. 새로고침 자체는 사용자가 누를 때만 한다
+    // (입력 중인 내용이 사라지지 않도록).
+    (function () {
+      var baseline = null;
+      var found = false;
+      function notify() {
+        window.woogyocheongUpdateReady = true;
+        if (typeof window.woogyocheongOnUpdate === 'function') window.woogyocheongOnUpdate();
+      }
+      function check() {
+        // 이미 찾았으면 다시 확인하지 않고 안내만 다시 띄운다(다른 알림에 밀려 닫혔을 수 있음)
+        if (found) { notify(); return; }
+        fetch('main.dart.js', { method: 'HEAD', cache: 'no-store' }).then(function (res) {
+          if (!res.ok) return;
+          var tag = res.headers.get('etag') || res.headers.get('last-modified');
+          if (!tag) return;
+          if (baseline === null) { baseline = tag; return; }
+          if (tag !== baseline) {
+            found = true;
+            notify();
+          }
+        }).catch(function () {});
+      }
+      window.woogyocheongReload = function () { location.reload(); };
+      check();
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') check();
+      });
+      setInterval(function () {
+        if (document.visibilityState === 'visible') check();
+      }, 5 * 60 * 1000);
+    })();
   </script>
 
 

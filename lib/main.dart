@@ -12,6 +12,7 @@ import 'services/demo_data.dart';
 import 'services/firestore_service.dart' show demoMode;
 import 'services/push_service.dart';
 import 'utils/theme.dart';
+import 'utils/web_update.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,28 @@ void main() async {
 
   await initializeDateFormatting('ko', null);
   runApp(const ChurchYouthApp());
+  watchWebUpdates(_showUpdateBanner);
+}
+
+// 웹(특히 설치형으로 백그라운드에 둔 창)에서 새 배포가 감지되면 새로고침 안내.
+// 입력 중인 내용이 사라지지 않도록 자동으로 새로고침하지 않고 사용자가 누르게 한다
+// 감지 스크립트는 화면으로 돌아올 때마다 다시 부르므로, 이미 떠 있으면 겹쳐 띄우지 않는다
+bool _updateBannerShowing = false;
+
+void _showUpdateBanner() {
+  final messenger = PushService.instance.messengerKey.currentState;
+  if (messenger == null || _updateBannerShowing) return;
+  _updateBannerShowing = true;
+  messenger
+      .showSnackBar(
+        const SnackBar(
+          content: Text('새 버전이 나왔어요. 새로고침하면 바로 적용돼요.'),
+          duration: Duration(days: 1),
+          action: SnackBarAction(label: '새로고침', onPressed: reloadWebPage),
+        ),
+      )
+      .closed
+      .then((_) => _updateBannerShowing = false);
 }
 
 class ChurchYouthApp extends StatelessWidget {
