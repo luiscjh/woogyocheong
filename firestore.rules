@@ -110,7 +110,13 @@ service cloud.firestore {
 
     // ── users ───────────────────────────────────────────────────────
     match /users/{uid} {
-      allow read: if isSignedIn();
+      // 회원 정보(연락처·생년월일 등)는 본인과, 명단을 다루는 역할(소팀장 이상,
+      // 사역팀장)만 읽을 수 있다. 앱 화면은 역할별로 범위를 더 좁혀 보여 줌
+      // (member_management.dart). 일반 회원 화면은 다른 회원 문서를 읽지 않음 —
+      // 링크만 알면 누구나 가입할 수 있으므로 갓 가입한 계정이 전체 명단을
+      // 직접 조회하지 못하게 막는다
+      allow read: if isOwner(uid) || isSmallLeader() ||
+        (isRegistered() && myData().get('isMinistryLead', false) == true);
       // Google 최초 로그인 시 본인 uid로 role=member/department='' 상태로만 스스로
       // 생성 가능. 그 외(CSV 일괄 가져오기, 관리자가 미리 명단 등록 등)는 소팀장
       // 이상이 대행 생성 — 단, 소팀장 이상이 대행 생성할 때도 role은 'member'로만

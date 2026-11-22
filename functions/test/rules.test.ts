@@ -98,9 +98,39 @@ describe("기존 규칙 회귀 확인(변경 없음)", () => {
     await assertFails(setDoc(doc(db, "jobRuns/x"), { a: 1 }));
     await assertFails(getDoc(doc(db, "_emulatorFcmLog/x")));
   });
-  test("users 문서 읽기는 로그인 사용자 전체(기존과 동일)", async () => {
-    await assertSucceeds(getDoc(doc(env.authenticatedContext("bob").firestore(), "users/alice")));
-    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), "users/alice")));
+});
+
+describe("users 읽기: 본인과 명단을 다루는 역할만", () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "users/small"), { name: "S", role: "small_leader", department: "A-1" });
+      await setDoc(doc(db, "users/mlead"), { name: "M", role: "member", department: "A-1", ministryTeam: "콘텐츠팀", isMinistryLead: true });
+    });
+  });
+
+  test("본인 문서는 읽기 허용(가입 직후 문서가 없어도)", async () => {
+    await assertSucceeds(getDoc(doc(alice(), "users/alice")));
+    await assertSucceeds(getDoc(doc(env.authenticatedContext("newbie").firestore(), "users/newbie")));
+  });
+
+  test("일반 회원·갓 가입한 계정·비로그인: 남의 문서와 전체 명단 조회 거부", async () => {
+    for (const db of [
+      env.authenticatedContext("bob").firestore(),
+      env.authenticatedContext("newbie").firestore(),
+      env.unauthenticatedContext().firestore(),
+    ]) {
+      await assertFails(getDoc(doc(db, "users/alice")));
+      await assertFails(getDocs(collection(db, "users")));
+    }
+  });
+
+  test("소팀장 이상·목사님·사역팀장: 전체 명단 조회 허용", async () => {
+    for (const uid of ["small", "pastor", "mlead"]) {
+      const db = env.authenticatedContext(uid).firestore();
+      await assertSucceeds(getDoc(doc(db, "users/alice")));
+      await assertSucceeds(getDocs(collection(db, "users")));
+    }
   });
 });
 
