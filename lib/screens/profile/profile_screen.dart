@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../utils/constants.dart';
+import '../../utils/web_install.dart';
 import '../../widgets/warning_banner.dart';
 
 // 본인 역할을 스스로 양도할 수 있는 역할 — 목사님만 가능
@@ -101,6 +102,11 @@ class ProfileScreen extends StatelessWidget {
                   label: Text('${UserRole.label(user.role)} 역할 양도'),
                 ),
               ),
+            ],
+            // 웹 브라우저로 접속했을 때만(설치된 앱·Android/iOS 앱에서는 숨김)
+            if (webInstallState() != WebInstallState.installed) ...[
+              const SizedBox(height: 20),
+              const _InstallAppButton(),
             ],
             const SizedBox(height: 32),
             SizedBox(
@@ -525,6 +531,67 @@ class _TestRoleSwitcherSectionState extends State<_TestRoleSwitcherSection> {
     auth.setCurrentUser(updated);
     messenger.showSnackBar(
       SnackBar(content: Text('역할을 ${option.label}(으)로 변경했습니다.'), backgroundColor: AppColors.success),
+    );
+  }
+}
+
+// 설치형 웹앱 설치 버튼. 크롬·엣지·삼성 인터넷은 브라우저 설치 창을 바로 띄우고,
+// 설치 창을 띄울 수 없는 환경은 직접 설치하는 방법을 안내한다
+class _InstallAppButton extends StatelessWidget {
+  const _InstallAppButton();
+
+  Future<void> _install(BuildContext context) async {
+    final state = webInstallState();
+    if (state == WebInstallState.prompt) {
+      final accepted = await promptWebInstall();
+      if (accepted && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('설치했어요. 홈 화면이나 앱 목록에서 우교청을 열 수 있어요.')),
+        );
+      }
+      return;
+    }
+    final (title, body) = switch (state) {
+      WebInstallState.ios => (
+          '홈 화면에 추가',
+          'Safari(또는 iPhone용 Chrome)에서\n'
+              '1. 공유 버튼(네모에서 화살표가 나오는 아이콘)을 누르고\n'
+              '2. "홈 화면에 추가"를 누르면\n'
+              '홈 화면에 우교청 아이콘이 생겨요.',
+        ),
+      WebInstallState.inapp => (
+          '다른 브라우저로 열어 주세요',
+          '카카오톡 같은 앱 안에서 연 화면에서는 설치할 수 없어요.\n'
+              '오른쪽 위(또는 아래) 메뉴에서 "다른 브라우저로 열기"를 눌러 '
+              'Chrome(아이폰은 Safari)으로 연 뒤 다시 "앱 설치"를 눌러 주세요.',
+        ),
+      _ => (
+          '브라우저 메뉴에서 설치',
+          '이미 설치했다면 홈 화면이나 앱 목록에서 우교청을 찾아 주세요.\n\n'
+              '아직 설치하지 않았다면 Chrome 메뉴(⋮)에서 "앱 설치" 또는 '
+              '"홈 화면에 추가"를 눌러 주세요. PC Chrome은 주소창 오른쪽의 설치 '
+              '아이콘으로도 설치할 수 있어요.',
+        ),
+    };
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('확인'))],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () => _install(context),
+        icon: const Icon(Icons.install_mobile),
+        label: const Text('앱 설치'),
+      ),
     );
   }
 }

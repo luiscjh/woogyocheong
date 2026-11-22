@@ -180,6 +180,39 @@
       }, 5 * 60 * 1000);
     })();
   </script>
+  <script>
+    // 내 정보 화면의 "앱 설치" 버튼(lib/utils/web_install/web_install_web.dart)용.
+    // 크롬·엣지·삼성 인터넷은 beforeinstallprompt를 받아 두었다가 버튼을 누르면 설치
+    // 창을 띄운다. 이 이벤트가 없는 환경(iOS, 카카오톡 등 인앱 브라우저, 이미 설치됨)은
+    // 상태만 알려 주고 앱이 안내 문구를 보여 준다
+    (function () {
+      var deferred = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferred = e;
+      });
+      window.addEventListener('appinstalled', function () { deferred = null; });
+      window.woogyocheongInstallState = function () {
+        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+          return 'installed';
+        }
+        if (deferred) return 'prompt';
+        var ua = navigator.userAgent;
+        if (/KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\//i.test(ua)) return 'inapp';
+        if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+          return 'ios';
+        }
+        return 'manual';
+      };
+      window.woogyocheongInstall = function () {
+        if (!deferred) return Promise.resolve('unavailable');
+        var e = deferred;
+        deferred = null; // 한 번 띄운 이벤트는 다시 쓸 수 없음
+        return e.prompt().then(function () { return e.userChoice; })
+          .then(function (choice) { return choice.outcome; }, function () { return 'unavailable'; });
+      };
+    })();
+  </script>
 
 
 </body></html>
