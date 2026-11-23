@@ -17,19 +17,19 @@ UserModel _testAccount(String role, String department) => UserModel(
     );
 
 void main() {
-  test('목사님: 부서/그룹은 목사님, 기수 숨김', () {
+  test('목사님: 부서/그룹은 목사님, 생년월일·기수 숨김', () {
     final u = _testAccount(UserRole.pastor, 'A-1');
     expect(profileGroupLabel(u), '목사님');
-    expect(profileShowsCohort(u), isFalse);
+    expect(profileShowsMemberDetails(u), isFalse);
   });
 
-  test('관리자: 부서/그룹은 관리자, 기수 숨김', () {
+  test('관리자: 부서/그룹은 관리자, 생년월일·기수 숨김', () {
     final u = _testAccount(UserRole.admin, 'A-1');
     expect(profileGroupLabel(u), '관리자');
-    expect(profileShowsCohort(u), isFalse);
+    expect(profileShowsMemberDetails(u), isFalse);
   });
 
-  test('그 밖의 역할: 소속 팀과 기수 표시', () {
+  test('그 밖의 역할: 소속 팀, 생년월일·기수 표시', () {
     for (final (role, dept) in [
       (UserRole.member, 'A-1'),
       (UserRole.smallLeader, 'A-1'),
@@ -39,7 +39,7 @@ void main() {
     ]) {
       final u = _testAccount(role, dept);
       expect(profileGroupLabel(u), dept);
-      expect(profileShowsCohort(u), isTrue);
+      expect(profileShowsMemberDetails(u), isTrue);
     }
   });
 }

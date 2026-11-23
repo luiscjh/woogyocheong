@@ -18,7 +18,7 @@ const _testAccountEmail = 'testing@church.com';
 // 내 정보의 역할별 표시. 역할(role)만 보고 정하므로 테스트 계정이 역할 전환으로
 // 목사님·관리자가 되어도 실제 계정과 똑같이 보인다
 // - 부서/그룹: 목사님·관리자는 소속 팀 대신 역할 이름
-// - 기수: 목사님·관리자는 숨김
+// - 생년월일·기수: 목사님·관리자는 숨김(청년부 회원 정보라 필요 없음)
 @visibleForTesting
 String profileGroupLabel(UserModel user) {
   if (user.isPastor) return '목사님';
@@ -27,7 +27,7 @@ String profileGroupLabel(UserModel user) {
 }
 
 @visibleForTesting
-bool profileShowsCohort(UserModel user) => !user.isAdmin;
+bool profileShowsMemberDetails(UserModel user) => !user.isAdmin;
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -77,17 +77,18 @@ class ProfileScreen extends StatelessWidget {
                 _InfoItem(icon: Icons.email_outlined, label: '이메일', value: user.email),
                 _InfoItem(icon: Icons.phone_outlined, label: '전화번호', value: user.phone.isEmpty ? '-' : user.phone),
                 _InfoItem(icon: Icons.group_outlined, label: '부서/그룹', value: profileGroupLabel(user)),
-                _InfoItem(
-                  icon: Icons.cake_outlined,
-                  label: '생년월일',
-                  value: user.birthDate != null ? DateFormat('yyyy년 MM월 dd일', 'ko').format(user.birthDate!) : '-',
-                ),
-                if (profileShowsCohort(user))
+                if (profileShowsMemberDetails(user)) ...[
+                  _InfoItem(
+                    icon: Icons.cake_outlined,
+                    label: '생년월일',
+                    value: user.birthDate != null ? DateFormat('yyyy년 MM월 dd일', 'ko').format(user.birthDate!) : '-',
+                  ),
                   _InfoItem(
                     icon: Icons.groups_2_outlined,
                     label: '기수',
                     value: user.cohort != null ? '${user.cohort}기' : '-',
                   ),
+                ],
                 _InfoItem(
                   icon: Icons.calendar_today_outlined,
                   label: '가입일',
