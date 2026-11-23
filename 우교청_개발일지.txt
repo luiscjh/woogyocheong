@@ -2841,4 +2841,6 @@
     '목사님'으로 표시, 기수는 안 보여줘도 됨"
   - profile_screen.dart: user.isPastor면 부서/그룹 값을 '목사님'으로(소속
     department 값 대신), 기수 항목은 숨김. 다른 역할은 그대로
+  - 관리자(role admin)도 부서/그룹을 '관리자'로 표시("관리자 역할은
+    부서/그룹에 '관리자'로" 요청). 기수는 요청이 없어 그대로 표시
   - 검증: flutter analyze "No issues found!", flutter test 20건 통과

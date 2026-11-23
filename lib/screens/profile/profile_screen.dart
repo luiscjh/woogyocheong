@@ -62,11 +62,15 @@ class ProfileScreen extends StatelessWidget {
               items: [
                 _InfoItem(icon: Icons.email_outlined, label: '이메일', value: user.email),
                 _InfoItem(icon: Icons.phone_outlined, label: '전화번호', value: user.phone.isEmpty ? '-' : user.phone),
-                // 목사님은 소팀 소속이 아니므로 부서/그룹에 '목사님'으로 표시하고 기수는 숨김
+                // 목사님·관리자는 부서/그룹에 소속 팀 대신 역할 이름을 표시(목사님은 기수도 숨김)
                 _InfoItem(
                   icon: Icons.group_outlined,
                   label: '부서/그룹',
-                  value: user.isPastor ? '목사님' : (user.department.isEmpty ? '-' : user.department),
+                  value: user.isPastor
+                      ? '목사님'
+                      : user.role == UserRole.admin
+                          ? '관리자'
+                          : (user.department.isEmpty ? '-' : user.department),
                 ),
                 _InfoItem(
                   icon: Icons.cake_outlined,
