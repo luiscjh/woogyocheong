@@ -2841,6 +2841,16 @@
     '목사님'으로 표시, 기수는 안 보여줘도 됨"
   - profile_screen.dart: user.isPastor면 부서/그룹 값을 '목사님'으로(소속
     department 값 대신), 기수 항목은 숨김. 다른 역할은 그대로
-  - 관리자(role admin)도 부서/그룹을 '관리자'로 표시("관리자 역할은
-    부서/그룹에 '관리자'로" 요청). 기수는 요청이 없어 그대로 표시
-  - 검증: flutter analyze "No issues found!", flutter test 20건 통과
+  - 관리자(role admin)도 부서/그룹을 '관리자'로 표시하고 기수 숨김
+    ("관리자도 기수는 숨겨주고" 요청)
+  - 표시 규칙을 profileGroupLabel()/profileShowsCohort()로 분리(role만 보고
+    결정). 테스트 계정(testing@church.com)은 역할 전환 시 role·department만
+    바뀌므로 같은 규칙이 그대로 적용됨 — "앞으로 모든 수정사항을 테스트
+    계정에도 반영" 요청(개발자가 테스트 계정으로 확인 중)에 따라
+    test/profile_display_test.dart에 테스트 계정 역할별 표시 테스트 3건 추가
+  - 데모 모드 임시 빌드에서 테스트 계정으로 확인: 관리자 상태 부서/그룹
+    '관리자'·기수 줄 없음, 목사님으로 전환 후 '목사님'·기수 줄 없음·기수
+    제한 경고 없음. 관리자는 기존 정책대로 기수 제한 대상이라(목사님만 제외)
+    테스트 계정(20기)을 관리자로 두면 "허용된 기수 범위가 아니라 조회만"
+    경고가 계속 보임 — 이번 요청 범위 밖이라 그대로 둠
+  - 검증: flutter analyze "No issues found!", flutter test 23건 통과

@@ -15,6 +15,20 @@ const _transferableRoles = [UserRole.pastor];
 // 관리자~팀원 권한을 자유롭게 오가며 테스트할 수 있는 전용 계정
 const _testAccountEmail = 'testing@church.com';
 
+// 내 정보의 역할별 표시. 역할(role)만 보고 정하므로 테스트 계정이 역할 전환으로
+// 목사님·관리자가 되어도 실제 계정과 똑같이 보인다
+// - 부서/그룹: 목사님·관리자는 소속 팀 대신 역할 이름
+// - 기수: 목사님·관리자는 숨김
+@visibleForTesting
+String profileGroupLabel(UserModel user) {
+  if (user.isPastor) return '목사님';
+  if (user.role == UserRole.admin) return '관리자';
+  return user.department.isEmpty ? '-' : user.department;
+}
+
+@visibleForTesting
+bool profileShowsCohort(UserModel user) => !user.isAdmin;
+
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
@@ -62,22 +76,13 @@ class ProfileScreen extends StatelessWidget {
               items: [
                 _InfoItem(icon: Icons.email_outlined, label: '이메일', value: user.email),
                 _InfoItem(icon: Icons.phone_outlined, label: '전화번호', value: user.phone.isEmpty ? '-' : user.phone),
-                // 목사님·관리자는 부서/그룹에 소속 팀 대신 역할 이름을 표시(목사님은 기수도 숨김)
-                _InfoItem(
-                  icon: Icons.group_outlined,
-                  label: '부서/그룹',
-                  value: user.isPastor
-                      ? '목사님'
-                      : user.role == UserRole.admin
-                          ? '관리자'
-                          : (user.department.isEmpty ? '-' : user.department),
-                ),
+                _InfoItem(icon: Icons.group_outlined, label: '부서/그룹', value: profileGroupLabel(user)),
                 _InfoItem(
                   icon: Icons.cake_outlined,
                   label: '생년월일',
                   value: user.birthDate != null ? DateFormat('yyyy년 MM월 dd일', 'ko').format(user.birthDate!) : '-',
                 ),
-                if (!user.isPastor)
+                if (profileShowsCohort(user))
                   _InfoItem(
                     icon: Icons.groups_2_outlined,
                     label: '기수',
