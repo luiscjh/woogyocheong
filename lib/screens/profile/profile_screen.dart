@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -552,51 +554,16 @@ class _TestRoleSwitcherSectionState extends State<_TestRoleSwitcherSection> {
 }
 
 // 설치형 웹앱 설치 버튼. 크롬·엣지·삼성 인터넷은 브라우저 설치 창을 바로 띄우고,
-// 설치 창을 띄울 수 없는 환경은 직접 설치하는 방법을 안내한다
+// 그 밖의 환경은 안내 창을 보여 준다(iOS는 애플 정책상 웹 페이지가 설치 창을 띄울 수 없음)
 class _InstallAppButton extends StatelessWidget {
   const _InstallAppButton();
 
   Future<void> _install(BuildContext context) async {
-    final state = webInstallState();
-    if (state == WebInstallState.prompt) {
-      final accepted = await promptWebInstall();
-      if (accepted && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('설치했어요. 홈 화면이나 앱 목록에서 우교청을 열 수 있어요.')),
-        );
-      }
+    if (webInstallState() == WebInstallState.prompt) {
+      await _promptAndReport(ScaffoldMessenger.of(context));
       return;
     }
-    final (title, body) = switch (state) {
-      WebInstallState.ios => (
-          '홈 화면에 추가',
-          'Safari(또는 iPhone용 Chrome)에서\n'
-              '1. 공유 버튼(네모에서 화살표가 나오는 아이콘)을 누르고\n'
-              '2. "홈 화면에 추가"를 누르면\n'
-              '홈 화면에 우교청 아이콘이 생겨요.',
-        ),
-      WebInstallState.inapp => (
-          '다른 브라우저로 열어 주세요',
-          '카카오톡 같은 앱 안에서 연 화면에서는 설치할 수 없어요.\n'
-              '오른쪽 위(또는 아래) 메뉴에서 "다른 브라우저로 열기"를 눌러 '
-              'Chrome(아이폰은 Safari)으로 연 뒤 다시 "앱 설치"를 눌러 주세요.',
-        ),
-      _ => (
-          '브라우저 메뉴에서 설치',
-          '이미 설치했다면 홈 화면이나 앱 목록에서 우교청을 찾아 주세요.\n\n'
-              '아직 설치하지 않았다면 Chrome 메뉴(⋮)에서 "앱 설치" 또는 '
-              '"홈 화면에 추가"를 눌러 주세요. PC Chrome은 주소창 오른쪽의 설치 '
-              '아이콘으로도 설치할 수 있어요.',
-        ),
-    };
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('확인'))],
-      ),
-    );
+    await showDialog<void>(context: context, builder: (_) => const _InstallGuideDialog());
   }
 
   @override
@@ -608,6 +575,116 @@ class _InstallAppButton extends StatelessWidget {
         icon: const Icon(Icons.install_mobile),
         label: const Text('앱 설치'),
       ),
+    );
+  }
+}
+
+Future<void> _promptAndReport(ScaffoldMessengerState messenger) async {
+  if (await promptWebInstall()) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('설치했어요. 홈 화면이나 앱 목록에서 우교청을 열 수 있어요.')),
+    );
+  }
+}
+
+// 바로 설치할 수 없을 때의 안내 창. 안드로이드·PC는 브라우저가 설치를 허락하는 즉시
+// (크롬은 페이지를 잠시 보고 터치한 뒤) 창 안의 "설치" 버튼이 켜져 바로 설치할 수 있다
+class _InstallGuideDialog extends StatefulWidget {
+  const _InstallGuideDialog();
+
+  @override
+  State<_InstallGuideDialog> createState() => _InstallGuideDialogState();
+}
+
+class _InstallGuideDialogState extends State<_InstallGuideDialog> {
+  late WebInstallState _state = webInstallState();
+  Timer? _poll;
+  // 외부 브라우저로 자동 전환할 수 없는 앱 안의 브라우저(iOS의 카카오톡 외 앱 등)
+  bool _externalFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _poll = Timer.periodic(const Duration(seconds: 1), (_) {
+      final next = webInstallState();
+      if (next != _state && mounted) setState(() => _state = next);
+    });
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (title, body) = switch (_state) {
+      WebInstallState.prompt => ('설치 준비 완료', '아래 "설치"를 누르면 바로 설치돼요.'),
+      WebInstallState.ios => (
+          '홈 화면에 추가',
+          '아이폰·아이패드는 애플 정책상 버튼으로 바로 설치할 수 없어서 직접 추가해야 해요.\n\n'
+              '1. Safari 아래쪽(아이패드는 위쪽)의 공유 버튼(네모에서 화살표가 나오는 아이콘)을 눌러요.\n'
+              '2. 목록을 내려 "홈 화면에 추가"를 눌러요.\n'
+              '3. 오른쪽 위 "추가"를 누르면 홈 화면에 우교청 앱이 생겨요.\n\n'
+              'iPhone용 Chrome에서도 주소창 옆 공유 버튼 → "홈 화면에 추가"로 할 수 있어요.',
+        ),
+      WebInstallState.inappAndroid => (
+          'Chrome에서 설치해 주세요',
+          '카카오톡 같은 앱 안의 화면에서는 설치할 수 없어요.\n'
+              '아래 "Chrome으로 열기"를 누른 뒤, 열린 Chrome에서 다시 "앱 설치"를 눌러 주세요.',
+        ),
+      WebInstallState.inappIos => (
+          'Safari에서 설치해 주세요',
+          '카카오톡 같은 앱 안의 화면에서는 설치할 수 없어요.\n'
+              '아래 "Safari로 열기"를 누르거나(카카오톡), 화면의 메뉴에서 "Safari로 열기"를 '
+              '고른 뒤 다시 "앱 설치"를 눌러 주세요.',
+        ),
+      WebInstallState.android => (
+          '앱 설치',
+          'Chrome이 설치를 준비하는 중이에요. 잠시 화면을 둘러보면 아래 "설치" 버튼이 켜져요.\n\n'
+              '바로 설치하려면 Chrome 오른쪽 위 메뉴(⋮) → "앱 설치"(또는 "홈 화면에 추가")를 눌러도 돼요.\n'
+              '이미 설치했다면 홈 화면이나 앱 목록에서 우교청을 찾아 주세요.',
+        ),
+      _ => (
+          '앱 설치',
+          'Chrome 주소창 오른쪽의 설치 아이콘이나 메뉴(⋮) → "앱 설치"로 설치할 수 있어요. '
+              '설치가 준비되면 아래 "설치" 버튼도 켜져요.\n'
+              '이미 설치했다면 앱 목록에서 우교청을 찾아 주세요.',
+        ),
+    };
+    final canPrompt = _state == WebInstallState.prompt;
+    final showInstall = canPrompt || _state == WebInstallState.android || _state == WebInstallState.manual;
+    return AlertDialog(
+      title: Text(title),
+      content: SingleChildScrollView(
+        child: Text(_externalFailed
+            ? '$body\n\n이 앱에서는 자동으로 열 수 없어요. 화면 오른쪽 위(또는 아래)의 메뉴(⋯)에서 '
+                '"Safari로 열기" 또는 "다른 브라우저로 열기"를 눌러 주세요.'
+            : body),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('닫기')),
+        if (_state == WebInstallState.inappAndroid || _state == WebInstallState.inappIos)
+          ElevatedButton(
+            onPressed: () {
+              if (!openInExternalBrowser()) setState(() => _externalFailed = true);
+            },
+            child: Text(_state == WebInstallState.inappIos ? 'Safari로 열기' : 'Chrome으로 열기'),
+          ),
+        if (showInstall)
+          ElevatedButton(
+            onPressed: canPrompt
+                ? () {
+                    // 창이 닫히기 전에 messenger를 잡아 둔다(닫힌 뒤에는 이 context를 쓸 수 없음)
+                    final messenger = ScaffoldMessenger.of(context);
+                    Navigator.pop(context);
+                    _promptAndReport(messenger);
+                  }
+                : null,
+            child: const Text('설치'),
+          ),
+      ],
     );
   }
 }

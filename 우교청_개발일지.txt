@@ -2863,3 +2863,29 @@
     보였다는 제보 — 서버 두 주소의 main.dart.js가 로컬 빌드와 같고
     Cache-Control: no-cache도 정상임을 확인. 휴대폰이 배포 전에 열어 둔
     화면을 보여 준 것으로 보고 새로 열기 방법 안내(원인 미확정)
+
+■ "앱 설치" 버튼 개선 — 안드로이드는 버튼으로 설치, iOS는 직접 추가 안내
+  - 배경: "앱설치 버튼이 바로 설치되지 않고 안내 문구창만 나온다. 앱설치는
+    iOS와 안드로이드 모두 가능해야 해"
+  - 원인/한계: iOS는 애플 정책상 어떤 웹 페이지도 설치 창을 띄울 수 없음(공유 →
+    홈 화면에 추가만 가능). 안드로이드 크롬은 beforeinstallprompt가 있어야 바로
+    설치되는데, 크롬이 페이지를 30초쯤 보고 한 번 이상 터치한 뒤에야 이벤트를
+    주고, 카카오톡 등 인앱 브라우저·이미 설치된 경우에는 주지 않음
+  - web/index.html: 상태를 installed / prompt / android / ios / inappAndroid /
+    inappIos / manual로 세분화(인앱 감지에 DaumApps·everytimeApp·안드로이드
+    WebView(; wv) 추가). woogyocheongOpenExternal(): 카카오톡은
+    kakaotalk://web/openExternal?url=, 안드로이드 인앱은 크롬 intent:// 로
+    같은 주소를 외부 브라우저에서 엶. iOS의 카카오톡 외 인앱은 방법이 없어 false
+  - profile_screen.dart: prompt면 바로 설치 창. 아니면 _InstallGuideDialog —
+    1초마다 상태를 다시 확인해 크롬이 설치를 허락하는 즉시 "설치" 버튼이
+    켜짐(안드로이드·PC). 인앱이면 "Chrome으로 열기"/"Safari로 열기" 버튼,
+    자동으로 못 열면 메뉴에서 여는 방법 추가 안내. iOS는 Safari 공유 → 홈
+    화면에 추가 3단계 + iPhone용 Chrome 안내. 설치 결과 SnackBar는 창이
+    닫히기 전에 ScaffoldMessenger를 잡아 두고 표시
+  - 검증: analyze/test(23건) 통과. 데모 모드 임시 빌드(확인 후 삭제,
+    demoMode false 복구)에서 테스트 계정(관리자 상태, 생년월일·기수 없음도
+    함께 확인)으로: android 상태 안내 창에서 "설치" 꺼짐 → 상태를 prompt로
+    바꾸자 "설치 준비 완료"로 바뀌고 버튼 켜짐 → 누르면 설치 함수 1회 호출 ·
+    "설치했어요" SnackBar, inappIos에서 "Safari로 열기" → 자동 전환 불가 안내
+    추가 표시. 실제 크롬 설치 창·카카오톡 외부 열기·안드로이드 intent는 실기기
+    확인 필요

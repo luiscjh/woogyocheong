@@ -3,4 +3,6 @@ WebInstallState webInstallState() => WebInstallState.installed;
 
 Future<bool> promptWebInstall() async => false;
 
-enum WebInstallState { installed, prompt, ios, inapp, manual }
+bool openInExternalBrowser() => false;
+
+enum WebInstallState { installed, prompt, android, ios, inappAndroid, inappIos, manual }

@@ -182,9 +182,11 @@
   </script>
   <script>
     // 내 정보 화면의 "앱 설치" 버튼(lib/utils/web_install/web_install_web.dart)용.
-    // 크롬·엣지·삼성 인터넷은 beforeinstallprompt를 받아 두었다가 버튼을 누르면 설치
-    // 창을 띄운다. 이 이벤트가 없는 환경(iOS, 카카오톡 등 인앱 브라우저, 이미 설치됨)은
-    // 상태만 알려 주고 앱이 안내 문구를 보여 준다
+    // - 크롬·엣지·삼성 인터넷(안드로이드·PC): beforeinstallprompt를 받아 두었다가 버튼을
+    //   누르면 설치 창을 띄운다. 크롬은 페이지를 30초쯤 보고 한 번 이상 터치해야 이 이벤트를
+    //   주므로, 아직 없으면 'android'/'manual'로 알리고 앱이 안내 창에서 기다린다
+    // - iOS: 애플이 웹 페이지의 설치 창을 허용하지 않아 공유 → 홈 화면에 추가 안내만 가능
+    // - 카카오톡 등 앱 안의 브라우저: 설치가 안 되므로 외부 브라우저로 다시 연다
     (function () {
       var deferred = null;
       window.addEventListener('beforeinstallprompt', function (e) {
@@ -192,24 +194,42 @@
         deferred = e;
       });
       window.addEventListener('appinstalled', function () { deferred = null; });
+      var ua = navigator.userAgent;
+      var isIos = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var isAndroid = /Android/i.test(ua);
+      var isKakao = /KAKAOTALK/i.test(ua);
+      var isInApp = isKakao || /NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp|; wv\)/i.test(ua);
       window.woogyocheongInstallState = function () {
         if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
           return 'installed';
         }
         if (deferred) return 'prompt';
-        var ua = navigator.userAgent;
-        if (/KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\//i.test(ua)) return 'inapp';
-        if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
-          return 'ios';
-        }
+        if (isInApp) return isIos ? 'inappIos' : 'inappAndroid';
+        if (isIos) return 'ios';
+        if (isAndroid) return 'android';
         return 'manual';
       };
       window.woogyocheongInstall = function () {
         if (!deferred) return Promise.resolve('unavailable');
         var e = deferred;
         deferred = null; // 한 번 띄운 이벤트는 다시 쓸 수 없음
-        return e.prompt().then(function () { return e.userChoice; })
+        return Promise.resolve(e.prompt()).then(function () { return e.userChoice; })
           .then(function (choice) { return choice.outcome; }, function () { return 'unavailable'; });
+      };
+      // 앱 안의 브라우저에서 같은 주소를 외부 브라우저로 연다. 열 수 있으면 true
+      // (카카오톡은 자체 스킴, 안드로이드는 크롬 intent. iOS의 다른 인앱 브라우저는 방법이 없음)
+      window.woogyocheongOpenExternal = function () {
+        var url = location.href;
+        if (isKakao) {
+          location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(url);
+          return true;
+        }
+        if (isAndroid) {
+          location.href = 'intent://' + location.host + location.pathname + location.search +
+            '#Intent;scheme=https;package=com.android.chrome;end';
+          return true;
+        }
+        return false;
       };
     })();
   </script>
