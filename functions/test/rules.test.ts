@@ -158,3 +158,52 @@ describe("notifications 삭제(보관 기간 정리)", () => {
     await assertFails(deleteDoc(doc(env.unauthenticatedContext().firestore(), "notifications/bobOld")));
   });
 });
+
+describe("가입 화면 개인정보 동의", () => {
+  // 앱(UserModel.toMap)이 Google 첫 로그인 때 만드는 본인 문서
+  const fresh = (email: string) => ({
+    name: "N", email, phone: "", role: "member", department: "", joinDate: Timestamp.now(),
+    profileImageUrl: null, permissions: [], newFamilyGraduatedTo: null, ministryTeam: "", executiveTitle: "",
+    isMinistryLead: false, bannerAccessGranted: false, birthDate: null, cohort: null,
+    privacyConsentAt: null, privacyConsentVersion: null,
+  });
+  const newbie = () => env.authenticatedContext("newbie", { email: "n@x.com", email_verified: true }).firestore();
+  const onboard = { department: "A-1", cohort: 27, birthDate: Timestamp.now() };
+  const consent = { privacyConsentAt: Timestamp.now(), privacyConsentVersion: "2026-10-11" };
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "users/small"), { name: "S", role: "small_leader", department: "A-1" });
+    });
+  });
+
+  test("동의 기록을 미리 채운 채 문서를 만들 수 없음", async () => {
+    await assertSucceeds(setDoc(doc(newbie(), "users/newbie"), fresh("n@x.com")));
+    await assertFails(setDoc(doc(newbie(), "users/newbie"), { ...fresh("n@x.com"), ...consent }));
+    await assertFails(setDoc(doc(env.authenticatedContext("small").firestore(), "users/roster1"),
+      { ...fresh(""), ...consent }));
+  });
+
+  test("온보딩은 동의 기록이 있어야 완료", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "users/newbie"), fresh("n@x.com"));
+    });
+    const ref = doc(newbie(), "users/newbie");
+    await assertFails(updateDoc(ref, onboard));
+    await assertFails(updateDoc(ref, { ...onboard, privacyConsentAt: "2026-11-25" }));
+    await assertSucceeds(updateDoc(ref, { ...onboard, ...consent }));
+  });
+
+  test("소팀장은 회원의 동의 기록을 바꿀 수 없음(다른 정보 수정은 허용)", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "users/alice"), { ...fresh("a@x.com"), ...onboard, ...consent });
+      await setDoc(doc(ctx.firestore(), "users/old"), { name: "O", role: "member", department: "A-1" });
+    });
+    const db = env.authenticatedContext("small").firestore();
+    await assertSucceeds(updateDoc(doc(db, "users/alice"), { phone: "010" }));
+    await assertFails(updateDoc(doc(db, "users/alice"), { privacyConsentVersion: "2099-01-01" }));
+    // 동의 기능 이전에 가입한 회원 문서: 앱이 null로 함께 써도 수정 가능, 값을 넣는 건 거부
+    await assertSucceeds(updateDoc(doc(db, "users/old"), { phone: "010", privacyConsentAt: null, privacyConsentVersion: null }));
+    await assertFails(updateDoc(doc(db, "users/old"), consent));
+  });
+});

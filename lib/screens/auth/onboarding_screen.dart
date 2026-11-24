@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/constants.dart';
+import '../../utils/privacy_consent.dart';
 
-// Google 로그인으로 처음 가입한 회원의 소속(이름/팀)을 입력받는 온보딩 화면
+// Google 로그인으로 처음 가입한 회원의 소속(이름/팀)을 입력받고 개인정보 동의를 받는 온보딩 화면
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -20,6 +22,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String? _selectedTeam;
   DateTime? _birthDate;
   bool _isLoading = false;
+  // PrivacyConsent.items 순서대로 각 필수 항목 동의 여부
+  final _agreed = List<bool>.filled(PrivacyConsent.items.length, false);
 
   @override
   void initState() {
@@ -55,6 +59,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
       return;
     }
+    if (!_agreed.every((a) => a)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('개인정보 필수 항목에 모두 동의해 주세요.'), backgroundColor: AppColors.warning),
+      );
+      return;
+    }
     final authProvider = context.read<AuthProvider>();
     final user = authProvider.currentUser;
     if (user == null) return;
@@ -66,6 +76,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         department: _selectedTeam,
         birthDate: _birthDate,
         cohort: int.parse(_cohortCtrl.text.trim()),
+        privacyConsentAt: DateTime.now(),
+        privacyConsentVersion: PrivacyConsent.policyVersion,
       );
       await FirestoreService().updateUser(updated, previousDepartment: user.department);
       if (!mounted) return;
@@ -95,7 +107,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    '우교청에 처음 오셨네요! 이름, 소속 팀, 생년월일, 기수를 입력해 주세요.',
+                    '우교청에 처음 오셨네요! 이름, 소속 팀, 생년월일, 기수를 입력하고 개인정보 처리에 동의해 주세요.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
@@ -146,7 +158,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     keyboardType: TextInputType.number,
                     validator: (v) => (v == null || int.tryParse(v.trim()) == null) ? '기수를 숫자로 입력해 주세요.' : null,
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
+                  PrivacyConsentSection(
+                    agreed: _agreed,
+                    onChanged: (i, v) => setState(() => _agreed[i] = v),
+                    onChangedAll: (v) => setState(() => _agreed.fillRange(0, _agreed.length, v)),
+                  ),
+                  const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -170,6 +188,93 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// 가입 화면의 개인정보 동의 영역 — 전체 동의와 필수 항목별 동의(펼치면 수집 항목·
+// 목적·보유 기간 등 안내), 개인정보처리방침 전체 보기 링크
+class PrivacyConsentSection extends StatelessWidget {
+  final List<bool> agreed; // PrivacyConsent.items 순서
+  final void Function(int index, bool value) onChanged;
+  final ValueChanged<bool> onChangedAll;
+
+  const PrivacyConsentSection({
+    super.key,
+    required this.agreed,
+    required this.onChanged,
+    required this.onChangedAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CheckboxListTile(
+            key: const Key('consent-all'),
+            value: agreed.every((a) => a),
+            onChanged: (v) => onChangedAll(v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text('개인정보 처리에 모두 동의합니다', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          const Divider(height: 1),
+          for (var i = 0; i < PrivacyConsent.items.length; i++) _item(context, i),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => launchUrl(Uri.parse(AppLinks.privacyPolicy), mode: LaunchMode.externalApplication),
+              child: const Text('개인정보처리방침 전체 보기', style: TextStyle(fontSize: 13)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 항목 오른쪽 화살표를 누르면 수집 항목·목적·보유 기간 등을 펼쳐 보여 줌
+  Widget _item(BuildContext context, int i) {
+    final item = PrivacyConsent.items[i];
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: Key('consent-$i'),
+        tilePadding: const EdgeInsets.only(right: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        title: Row(
+          children: [
+            Checkbox(
+              key: Key('consent-check-$i'),
+              value: agreed[i],
+              onChanged: (v) => onChanged(i, v ?? false),
+            ),
+            Expanded(child: Text(item.title, style: const TextStyle(fontSize: 14))),
+          ],
+        ),
+        children: [
+          for (final (label, text) in item.details)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 84,
+                    child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                  Expanded(
+                    child: Text(text, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

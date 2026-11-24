@@ -36,6 +36,11 @@ class UserModel {
   // 전환됨(목사님 역할은 예외). null이면 아직 기수가 등록되지 않은
   // 상태로, 이 경우 제한 대상에서 제외됨
   final int? cohort;
+  // 개인정보 수집·이용 동의 — 가입(온보딩) 화면에서 필수 항목에 모두 동의한 시각과
+  // 그때의 개인정보처리방침 버전(PrivacyConsent.policyVersion). 이 기능 이전에
+  // 가입한 회원은 null
+  final DateTime? privacyConsentAt;
+  final String? privacyConsentVersion;
 
   UserModel({
     required this.uid,
@@ -54,6 +59,8 @@ class UserModel {
     this.bannerAccessGranted = false,
     this.birthDate,
     this.cohort,
+    this.privacyConsentAt,
+    this.privacyConsentVersion,
   });
 
   // 역할 계층 헬퍼
@@ -90,6 +97,8 @@ class UserModel {
       bannerAccessGranted: data['bannerAccessGranted'] ?? false,
       birthDate: (data['birthDate'] as Timestamp?)?.toDate(),
       cohort: data['cohort'] as int?,
+      privacyConsentAt: (data['privacyConsentAt'] as Timestamp?)?.toDate(),
+      privacyConsentVersion: data['privacyConsentVersion'] as String?,
     );
   }
 
@@ -110,6 +119,8 @@ class UserModel {
       'bannerAccessGranted': bannerAccessGranted,
       'birthDate': birthDate != null ? Timestamp.fromDate(birthDate!) : null,
       'cohort': cohort,
+      'privacyConsentAt': privacyConsentAt != null ? Timestamp.fromDate(privacyConsentAt!) : null,
+      'privacyConsentVersion': privacyConsentVersion,
     };
   }
 
@@ -129,6 +140,8 @@ class UserModel {
     bool? bannerAccessGranted,
     DateTime? birthDate,
     int? cohort,
+    DateTime? privacyConsentAt,
+    String? privacyConsentVersion,
   }) {
     return UserModel(
       uid: uid,
@@ -147,6 +160,8 @@ class UserModel {
       bannerAccessGranted: bannerAccessGranted ?? this.bannerAccessGranted,
       birthDate: birthDate ?? this.birthDate,
       cohort: cohort ?? this.cohort,
+      privacyConsentAt: privacyConsentAt ?? this.privacyConsentAt,
+      privacyConsentVersion: privacyConsentVersion ?? this.privacyConsentVersion,
     );
   }
 }

@@ -86,7 +86,8 @@ service cloud.firestore {
     function userKeys() {
       return ['name', 'email', 'phone', 'role', 'department', 'joinDate', 'profileImageUrl',
         'permissions', 'newFamilyGraduatedTo', 'ministryTeam', 'executiveTitle',
-        'isMinistryLead', 'bannerAccessGranted', 'birthDate', 'cohort'];
+        'isMinistryLead', 'bannerAccessGranted', 'birthDate', 'cohort',
+        'privacyConsentAt', 'privacyConsentVersion'];
     }
     function hasOnlyUserKeys() {
       return request.resource.data.keys().hasOnly(userKeys());
@@ -99,8 +100,11 @@ service cloud.firestore {
     // 새로 만드는 users 문서가 권한 필드를 들고 생기지 않게 한다 — 임원팀 직책·
     // permissions는 비어 있고 사역팀장 플래그는 false. 배너 위임만은 콘텐츠팀
     // 팀장이 콘텐츠팀원을 회원 추가 화면에서 만들 때 허용(update 규칙과 같은 범위)
+    // 개인정보 동의 기록도 들고 생길 수 없다 — 동의는 본인이 온보딩에서만 남김
     function createsNoPrivilege() {
       return hasOnlyUserKeys() &&
+        request.resource.data.get('privacyConsentAt', null) == null &&
+        request.resource.data.get('privacyConsentVersion', null) == null &&
         request.resource.data.get('permissions', []) == [] &&
         request.resource.data.get('executiveTitle', '') == '' &&
         request.resource.data.get('isMinistryLead', false) == false &&
@@ -153,8 +157,10 @@ service cloud.firestore {
         // 이미 있는 email은 관리자만 바꿀 수 있고 비어 있던 email을 처음 채우는 것만
         // 허용 — 그러지 않으면 소팀장이 남의 email을 자기 문서로 옮겨 리더 명단
         // 엑셀로 그 사람 대신 승급될 수 있었음(28차 작업 보안 점검 N-a)
+        // 개인정보 동의 기록(privacyConsentAt/Version)은 본인 온보딩에서만 남기므로 그대로 둠
         (isSmallLeader() && request.resource.data.role == resource.data.role &&
          changesOnlyUserKeys() &&
+         unchanged('privacyConsentAt', null) && unchanged('privacyConsentVersion', null) &&
          (unchanged('email', '') || resource.data.get('email', '') == '') &&
          unchanged('permissions', []) &&
          unchanged('executiveTitle', '') &&
@@ -169,7 +175,7 @@ service cloud.firestore {
         (isTestAccount() && isOwner(uid)) ||
         // 신규 가입 온보딩: 방금 만든 본인 문서(department가 비어있던 상태)에 소속팀 등
         // 정보를 처음 채우는 것만 허용, role은 member로 유지
-        // (온보딩 화면은 이름·소속팀·생년월일·기수만 채움 — 권한 관련 필드는 그대로).
+        // (온보딩 화면은 이름·소속팀·생년월일·기수와 개인정보 동의 기록만 채움 — 권한 관련 필드는 그대로).
         // 소속팀은 온보딩 화면 목록(AppTeams.smallTeams)에서만 고를 수 있고 기수는
         // 숫자 필수 — 그러지 않으면 탈퇴 후 재가입하면서 '임원팀' 같은 소속이나
         // 빈 기수로 기수 이용 제한을 피할 수 있었음(28차 작업 보안 점검 N5)
@@ -180,6 +186,9 @@ service cloud.firestore {
            'A-1', 'A-2', 'A-3', 'A-4', 'B-1', 'B-2', 'B-3', 'B-4',
            'C-1', 'C-2', 'C-3', 'C-4', 'D-1', 'D-2', 'D-3', 'D-4', '새가족팀'] &&
          request.resource.data.get('cohort', null) is int && hasOnlyUserKeys() &&
+         // 가입 화면의 개인정보 필수 동의를 마쳐야 가입 완료(동의 시각·방침 버전 기록)
+         request.resource.data.get('privacyConsentAt', null) is timestamp &&
+         request.resource.data.get('privacyConsentVersion', null) is string &&
          unchanged('permissions', []) && unchanged('executiveTitle', '') && unchanged('ministryTeam', '') &&
          unchanged('isMinistryLead', false) && unchanged('bannerAccessGranted', false)) ||
         // 콘텐츠팀 팀장이 팀원의 사역팀 소속 해제/배너 권한 위임을 관리 — 콘텐츠팀
