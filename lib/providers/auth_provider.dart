@@ -25,11 +25,14 @@ class AuthProvider extends ChangeNotifier {
 
   bool get isPastor => _currentUser?.isPastor ?? false;
   bool get isAdmin => _currentUser?.isAdmin ?? false;
-  bool get isExecutive => _currentUser?.isExecutive ?? false;
-  bool get isMidLeader => _currentUser?.isMidLeader ?? false;
-  bool get isSmallLeader => _currentUser?.isSmallLeader ?? false;
+  // 졸업생(UserModel.isGraduate)은 저장된 역할이 리더여도 조회만 가능 — 리더·사역팀장·
+  // 배너 권한을 모두 쓰지 않음
+  bool get isGraduate => _currentUser?.isGraduate ?? false;
+  bool get isExecutive => !isGraduate && (_currentUser?.isExecutive ?? false);
+  bool get isMidLeader => !isGraduate && (_currentUser?.isMidLeader ?? false);
+  bool get isSmallLeader => !isGraduate && (_currentUser?.isSmallLeader ?? false);
   // 사역팀(콘텐츠팀 등) 소속 여부/팀장 여부 — department와 독립된 별도 축
-  bool get isMinistryLead => _currentUser?.isMinistryLead ?? false;
+  bool get isMinistryLead => !isGraduate && (_currentUser?.isMinistryLead ?? false);
   bool get inContentTeam => _currentUser?.ministryTeam == AppTeams.contentTeam;
 
   // 출석/회비 수정 권한: 소팀장 이상
@@ -39,7 +42,8 @@ class AuthProvider extends ChangeNotifier {
   // 배너 관리 권한: 임원팀 이상이거나, 콘텐츠팀 팀장(고유 권한), 또는 팀장이
   // 직접 지정하여 권한을 공유받은 콘텐츠팀 팀원만 해당
   bool get canManageBanners =>
-      isExecutive || (inContentTeam && (isMinistryLead || (_currentUser?.bannerAccessGranted ?? false)));
+      isExecutive ||
+      (!isGraduate && inContentTeam && (isMinistryLead || (_currentUser?.bannerAccessGranted ?? false)));
   // 배너 관리 권한 "공유"(위임)를 실행할 수 있는지 여부: 관리자 또는 콘텐츠팀 팀장만 가능
   bool get canShareBannerAccess => isAdmin || (isMinistryLead && inContentTeam);
   // 회원 관리 권한: 소팀장 이상
@@ -49,16 +53,21 @@ class AuthProvider extends ChangeNotifier {
   bool get canAccessAdminTab => canManageMembers || canManageBanners || inContentTeam;
 
   // 기수 기반 이용 제한 여부 — true이면 출석 체크/회비 납부/심방 신청 등 쓰기 동작이
-  // 막히고 조회만 가능함. 목사님은 예외이며, 기수가 아직 등록되지 않았으면(cohort==null)
-  // 안전하게 제한하지 않음. 허용 범위는 CohortPolicy에 고정된 기준 연도/범위를 바탕으로
+  // 막히고 조회만 가능함. 범위보다 높은 기수는 졸업생(목사님·관리자 제외), 범위보다
+  // 낮은 기수는 목사님만 예외. 기수가 아직 등록되지 않았으면(cohort==null) 안전하게
+  // 제한하지 않음. 허용 범위는 CohortPolicy에 고정된 기준 연도/범위를 바탕으로
   // 매년 자동 계산됨(참고: lib/utils/constants.dart)
+  // 조회 전용 안내 문구의 앞부분(예: '졸업생은 조회만 가능합니다.')
+  String get cohortRestrictionReason => isGraduate ? '졸업생은' : '허용된 기수 범위가 아니라';
+
   bool get isCohortRestricted {
     final user = _currentUser;
     if (user == null) return false;
+    if (user.isGraduate) return true;
     if (user.isPastor) return false;
     final cohort = user.cohort;
     if (cohort == null) return false;
-    return cohort < CohortPolicy.minAllowedCohort || cohort > CohortPolicy.maxAllowedCohort;
+    return cohort > CohortPolicy.maxAllowedCohort;
   }
 
   AuthProvider() {

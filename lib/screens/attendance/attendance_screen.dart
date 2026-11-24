@@ -160,7 +160,7 @@ class _MemberAttendanceView extends StatelessWidget {
               else
                 WarningBanner(
                   isCohortRestricted
-                      ? '허용된 기수 범위가 아니라 조회만 가능합니다.'
+                      ? '${context.watch<AuthProvider>().cohortRestrictionReason} 조회만 가능합니다.'
                       : '출석체크는 주일(일요일)에만 가능합니다.',
                 ),
               const SizedBox(height: 40),

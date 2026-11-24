@@ -47,6 +47,9 @@ class UserRole {
   };
 
   static String label(String role) => labels[role] ?? role;
+
+  // 저장된 역할이 아니라 기수로 정해지는 표시용 역할(UserModel.isGraduate)
+  static const graduateLabel = '졸업생';
 }
 
 class AppTeams {
@@ -120,6 +123,10 @@ class CohortPolicy {
 
   static int get minAllowedCohort => baseMinCohort + (DateTime.now().year - baseYear);
   static int get maxAllowedCohort => baseMaxCohort + (DateTime.now().year - baseYear);
+
+  // 올해 허용 범위보다 높은 기수(숫자가 작을수록 먼저 들어온 높은 기수)는 졸업생.
+  // 역할 문서(role)는 그대로 두고 해마다 기수로 판정함 — 목사님·관리자 예외는 UserModel.isGraduate
+  static bool isGraduateCohort(int? cohort) => cohort != null && cohort < minAllowedCohort;
 }
 
 class VisitStatus {

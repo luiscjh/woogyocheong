@@ -23,4 +23,8 @@ test("기수 허용 범위는 해마다 1씩 이동(CohortPolicy와 동일)", ()
   assert.equal(isCohortRestricted(31, 2026), true);
   assert.equal(isCohortRestricted(24, 2027), true);
   assert.equal(isCohortRestricted(31, 2027), false);
+  // 졸업생(범위보다 높은 기수)은 제한하되 관리자는 졸업생이 아님. 낮은 기수는 관리자도 제한
+  assert.equal(isCohortRestricted(23, 2026, "small_leader"), true);
+  assert.equal(isCohortRestricted(23, 2026, "admin"), false);
+  assert.equal(isCohortRestricted(31, 2026, "admin"), true);
 });

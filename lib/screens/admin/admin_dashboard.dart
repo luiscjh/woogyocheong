@@ -21,7 +21,7 @@ class AdminDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final user = auth.currentUser!;
-    final roleLabel = UserRole.label(user.role);
+    final roleLabel = user.roleLabel;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),

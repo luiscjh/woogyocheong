@@ -47,10 +47,10 @@ class _MemberVisitView extends StatelessWidget {
           return CustomScrollView(
             slivers: [
               if (isCohortRestricted)
-                const SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                   sliver: SliverToBoxAdapter(
-                    child: WarningBanner('허용된 기수 범위가 아니라 심방 신청 없이 조회만 가능합니다.'),
+                    child: WarningBanner('${context.watch<AuthProvider>().cohortRestrictionReason} 심방 신청 없이 조회만 가능합니다.'),
                   ),
                 ),
               SliverPadding(

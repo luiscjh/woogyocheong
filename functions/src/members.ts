@@ -17,11 +17,13 @@ export interface UserDoc {
   name?: unknown;
 }
 
-// AuthProvider.isCohortRestricted와 같은 판정(목사님 예외는 호출부에서 이미 제외)
-export function isCohortRestricted(cohort: unknown, kstYear: number): boolean {
+// AuthProvider.isCohortRestricted와 같은 판정(목사님 예외는 호출부에서 이미 제외).
+// 범위보다 높은 기수(숫자가 작음)는 졸업생 — 관리자는 졸업생이 아니므로 제한하지 않음
+export function isCohortRestricted(cohort: unknown, kstYear: number, role?: unknown): boolean {
   if (typeof cohort !== "number") return false; // 기수 미등록이면 제한하지 않음(앱과 동일)
   const shift = kstYear - COHORT_BASE_YEAR;
-  return cohort < COHORT_BASE_MIN + shift || cohort > COHORT_BASE_MAX + shift;
+  if (cohort < COHORT_BASE_MIN + shift) return role !== "admin";
+  return cohort > COHORT_BASE_MAX + shift;
 }
 
 // 알림 대상: 앱에서 실제로 "오늘 출석 체크"를 할 수 있는 청년만.
@@ -34,6 +36,6 @@ export function isReminderTarget(user: UserDoc, kstYear: number): boolean {
   if (user.role === "pastor") return false;
   if (typeof user.department !== "string" || user.department.trim() === "") return false;
   if (typeof user.email === "string" && user.email.trim().toLowerCase() === TEST_ACCOUNT_EMAIL) return false;
-  if (isCohortRestricted(user.cohort, kstYear)) return false;
+  if (isCohortRestricted(user.cohort, kstYear, user.role)) return false;
   return true;
 }

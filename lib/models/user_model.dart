@@ -71,6 +71,12 @@ class UserModel {
   bool get isMidLeader => role == UserRole.midLeader || isExecutive;
   bool get isSmallLeader => role == UserRole.smallLeader || isMidLeader;
 
+  // 졸업생: 기수가 올해 허용 범위보다 높은 회원(목사님·관리자 제외). 저장된 role과
+  // 상관없이 조회만 가능하고 리더 권한도 쓰지 않음(AuthProvider에서 적용)
+  bool get isGraduate => !isAdmin && CohortPolicy.isGraduateCohort(cohort);
+  // 화면에 보여 줄 역할 이름 — 졸업생이면 '졸업생'
+  String get roleLabel => isGraduate ? UserRole.graduateLabel : UserRole.label(role);
+
   // 소속 중팀 (department 'A-1' → 'A')
   // 임원팀/새가족팀처럼 하이픈 없는 소속은 소팀 하위 구분이 없으므로 자기 자신이 곧 상위(중팀 수준) 단위가 됨
   String get midTeam => department.contains('-') ? department.split('-')[0] : department;

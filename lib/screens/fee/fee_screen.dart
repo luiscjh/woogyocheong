@@ -190,7 +190,7 @@ class _MemberFeeView extends StatelessWidget {
               else
                 WarningBanner(
                   isCohortRestricted
-                      ? '허용된 기수 범위가 아니라 조회만 가능합니다.'
+                      ? '${context.watch<AuthProvider>().cohortRestrictionReason} 조회만 가능합니다.'
                       : '회비 납부는 매월 3~4주차에만 가능합니다.',
                 ),
               const SizedBox(height: 40),

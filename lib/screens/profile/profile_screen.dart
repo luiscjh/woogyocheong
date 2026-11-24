@@ -63,7 +63,7 @@ class ProfileScreen extends StatelessWidget {
               user.name,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
-            if (user.role != UserRole.member)
+            if (user.role != UserRole.member || user.isGraduate)
               Container(
                 margin: const EdgeInsets.only(top: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -71,7 +71,7 @@ class ProfileScreen extends StatelessWidget {
                   color: AppColors.accent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(UserRole.label(user.role), style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600)),
+                child: Text(user.roleLabel, style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600)),
               ),
             const SizedBox(height: 32),
             _InfoCard(
@@ -100,8 +100,10 @@ class ProfileScreen extends StatelessWidget {
             ),
             if (context.watch<AuthProvider>().isCohortRestricted) ...[
               const SizedBox(height: 16),
-              const WarningBanner(
-                '현재 허용된 기수 범위가 아니라 조회만 가능한 상태입니다. 궁금한 점은 관리자에게 문의해 주세요.',
+              WarningBanner(
+                user.isGraduate
+                    ? '졸업생은 조회만 가능합니다. 궁금한 점은 관리자에게 문의해 주세요.'
+                    : '현재 허용된 기수 범위가 아니라 조회만 가능한 상태입니다. 궁금한 점은 관리자에게 문의해 주세요.',
                 width: double.infinity,
                 fontSize: 13,
               ),
@@ -395,10 +397,14 @@ class _RoleOption {
   // 사역팀(콘텐츠팀 등) 소속 여부 — department와 독립된 별도 축이므로 함께 관리
   final String ministryTeam;
   final bool isMinistryLead;
+  // 졸업생은 저장된 역할이 아니라 기수로 정해지므로(UserModel.isGraduate), 전환할 때
+  // 기수를 올해 허용 범위보다 한 기수 높게 바꾸고, 다른 역할로 돌아오면 범위 안으로 되돌림
+  final bool graduate;
 
-  const _RoleOption(this.label, this.role, this.department, {this.ministryTeam = '', this.isMinistryLead = false});
+  const _RoleOption(this.label, this.role, this.department,
+      {this.ministryTeam = '', this.isMinistryLead = false, this.graduate = false});
 
-  String get key => '$role|$department|$ministryTeam|$isMinistryLead';
+  String get key => '$role|$department|$ministryTeam|$isMinistryLead|$graduate';
 
   // 임원팀 직책은 테스트 전환에서 다루지 않으므로 비교하지 않음(예전에 직책이
   // 저장된 테스트 계정도 "임원팀"으로 표시됨)
@@ -406,7 +412,16 @@ class _RoleOption {
       role == u.role &&
       department == u.department &&
       ministryTeam == u.ministryTeam &&
-      isMinistryLead == u.isMinistryLead;
+      isMinistryLead == u.isMinistryLead &&
+      graduate == u.isGraduate;
+
+  // 전환 후 기수: 졸업생이면 범위보다 한 기수 높게, 졸업생 기수에서 다른 역할로
+  // 돌아오면 범위의 가장 높은 기수로, 그 밖에는 그대로
+  int? cohortFor(UserModel u) {
+    if (graduate) return CohortPolicy.minAllowedCohort - 1;
+    if (CohortPolicy.isGraduateCohort(u.cohort)) return CohortPolicy.minAllowedCohort;
+    return u.cohort;
+  }
 }
 
 const _testRoleOptions = [
@@ -423,6 +438,7 @@ const _testRoleOptions = [
   _RoleOption('새가족팀 팀장', UserRole.midLeader, AppTeams.newFamilyTeam),
   // 사역팀은 department와 독립된 축이라 role=팀원 + 실제 소속팀(A-1)을 유지한 채 ministryTeam만 부여
   _RoleOption('콘텐츠팀 팀장', UserRole.member, 'A-1', ministryTeam: AppTeams.contentTeam, isMinistryLead: true),
+  _RoleOption('졸업생', UserRole.member, 'A-1', graduate: true),
 ];
 
 // 테스트 전용 계정(testing@church.com)이 관리자~팀원 및 새가족 관련 역할을 오갈 수 있는 섹션.
@@ -448,7 +464,7 @@ class _TestRoleSwitcherSectionState extends State<_TestRoleSwitcherSection> {
   _RoleOption get _currentOption {
     final matchers = <bool Function(_RoleOption)>[
       (o) => o.matches(user),
-      (o) => o.role == user.role && o.department == user.department,
+      (o) => o.role == user.role && o.department == user.department && o.graduate == user.isGraduate,
       (o) => o.role == user.role,
     ];
     for (final matches in matchers) {
@@ -529,6 +545,7 @@ class _TestRoleSwitcherSectionState extends State<_TestRoleSwitcherSection> {
         department: option.department,
         ministryTeam: option.ministryTeam,
         isMinistryLead: option.isMinistryLead,
+        cohort: option.cohortFor(latest),
         // 임원팀은 직책 없이 전환(권한은 role로만 정해짐), 다른 역할은 원래 직책이 없음
         executiveTitle: '',
         // 콘텐츠팀 팀원 상태를 벗어나면 위임받았던 배너 관리 권한도 함께 초기화

@@ -475,7 +475,8 @@ class _MemberTile extends StatelessWidget {
         title: Row(
           children: [
             Text(member.name),
-            if (member.isAdmin) ...[
+            // 관리자·목사님과 졸업생은 이름 옆에 역할 표시
+            if (member.isAdmin || member.isGraduate) ...[
               const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -483,7 +484,7 @@ class _MemberTile extends StatelessWidget {
                   color: AppColors.accent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(UserRole.label(member.role), style: const TextStyle(color: AppColors.accent, fontSize: 10)),
+                child: Text(member.roleLabel, style: const TextStyle(color: AppColors.accent, fontSize: 10)),
               ),
             ],
           ],
