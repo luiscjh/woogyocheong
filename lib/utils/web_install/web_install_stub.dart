@@ -6,3 +6,8 @@ Future<bool> promptWebInstall() async => false;
 bool openInExternalBrowser() => false;
 
 enum WebInstallState { installed, prompt, android, ios, inappAndroid, inappIos, manual }
+
+// Google 로그인 방식 판단용(앱에서는 쓰지 않음)
+bool preferRedirectSignIn() => false;
+
+bool isInAppBrowser() => false;

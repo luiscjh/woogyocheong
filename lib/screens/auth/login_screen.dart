@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/constants.dart';
+import '../../utils/web_install.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -35,6 +36,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
+    // 카카오톡 등 앱 안의 브라우저는 Google이 로그인을 막아 두었으므로, 시도하기 전에
+    // 외부 브라우저(Chrome·Safari)로 다시 열도록 안내
+    if (isInAppBrowser()) {
+      await _showOpenExternalDialog();
+      return;
+    }
     final provider = context.read<AuthProvider>();
     final ok = await provider.signInWithGoogle();
     if (!ok && mounted) {
@@ -42,6 +49,33 @@ class _LoginScreenState extends State<LoginScreen> {
         SnackBar(content: Text(provider.error ?? 'Google 로그인 실패'), backgroundColor: AppColors.error),
       );
     }
+  }
+
+  Future<void> _showOpenExternalDialog() async {
+    var failed = false;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Chrome이나 Safari에서 열어 주세요'),
+          content: Text(
+            '카카오톡 같은 앱 안의 화면에서는 Google이 로그인을 막아 두었어요.\n'
+            '아래 버튼으로 Chrome(아이폰은 Safari)에서 연 뒤 다시 로그인해 주세요.'
+            '${failed ? '\n\n이 앱에서는 자동으로 열 수 없어요. 화면 오른쪽 위(또는 아래)의 메뉴(⋯)에서 '
+                '"Safari로 열기" 또는 "다른 브라우저로 열기"를 눌러 주세요.' : ''}',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('닫기')),
+            ElevatedButton(
+              onPressed: () {
+                if (!openInExternalBrowser()) setDialogState(() => failed = true);
+              },
+              child: const Text('브라우저로 열기'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _resetPassword() async {
@@ -65,7 +99,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.watch<AuthProvider>().status == AuthStatus.loading;
+    final auth = context.watch<AuthProvider>();
+    final isLoading = auth.status == AuthStatus.loading;
+    // Google 로그인 화면에서 돌아왔는데 실패한 경우의 안내
+    final notice = auth.loginNotice;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -160,6 +197,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
+                  if (notice != null) ...[
+                    const SizedBox(height: 12),
+                    Text(notice, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.error, fontSize: 13)),
+                  ],
                   const SizedBox(height: 12),
                   Text(
                     '계정이 없으신가요? Google로 로그인하면 자동으로 가입됩니다.',

@@ -7,6 +7,7 @@ import '../models/user_model.dart';
 import 'demo_data.dart';
 import 'firestore_service.dart';
 import 'push_service.dart';
+import '../utils/web_install.dart';
 
 class AuthService {
   FirebaseAuth get _auth => FirebaseAuth.instance;
@@ -52,7 +53,7 @@ class AuthService {
     if (demoMode) return _demoUser;
     final user = _auth.currentUser;
     if (user == null) return null;
-    return _fetchUserModel(user.uid);
+    return _ensureUserModel(user);
   }
 
   Future<UserModel?> _fetchUserModel(String uid) async {
@@ -85,7 +86,24 @@ class AuthService {
 
     UserCredential userCredential;
     if (kIsWeb) {
-      userCredential = await _auth.signInWithPopup(GoogleAuthProvider());
+      // 카카오톡 등 앱 안의 브라우저는 Google이 로그인을 막아 둠(disallowed_useragent)
+      if (isInAppBrowser()) throw Exception('inapp-browser');
+      final provider = GoogleAuthProvider();
+      // 휴대폰·설치한 앱: 팝업이 막히거나 결과를 못 돌려받는 경우가 많아 현재 창을
+      // Google 로그인으로 넘겼다가 돌아오게 한다. 돌아오면 authStateChanges가 처리
+      if (preferRedirectSignIn()) {
+        redirectStarted = true;
+        await _auth.signInWithRedirect(provider);
+        return null;
+      }
+      try {
+        userCredential = await _auth.signInWithPopup(provider);
+      } on FirebaseAuthException catch (e) {
+        if (e.code != 'popup-blocked' && e.code != 'operation-not-supported-in-this-environment') rethrow;
+        redirectStarted = true;
+        await _auth.signInWithRedirect(provider);
+        return null;
+      }
     } else {
       final googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) return null;
@@ -96,22 +114,49 @@ class AuthService {
       );
       userCredential = await _auth.signInWithCredential(credential);
     }
+    return _ensureUserModel(userCredential.user!);
+  }
 
-    final firebaseUser = userCredential.user!;
-    var userModel = await _fetchUserModel(firebaseUser.uid);
-    if (userModel == null) {
-      // department를 비워두면 앱에서 소속 선택 온보딩 화면으로 안내됨
-      userModel = UserModel(
-        uid: firebaseUser.uid,
-        name: firebaseUser.displayName ?? '이름 없음',
-        email: firebaseUser.email ?? '',
-        phone: '',
-        role: 'member',
-        department: '',
-        joinDate: DateTime.now(),
-      );
-      await _firestore.collection('users').doc(userModel.uid).set(userModel.toMap());
-    }
+  // 웹에서 Google 로그인 화면으로 넘어갔는지(이 경우 signInWithGoogle은 null을 돌려주고
+  // 페이지가 이동하므로, 실패로 보지 않음)
+  bool redirectStarted = false;
+
+  // 리디렉트 로그인에서 돌아왔을 때 실패했으면 그 오류를 던진다(성공은 authStateChanges가 처리)
+  Future<void> checkRedirectResult() async {
+    if (demoMode || !kIsWeb) return;
+    await _auth.getRedirectResult();
+  }
+
+  // Google로 처음 로그인한 회원은 회원 문서가 없으므로 만든다. 팝업 로그인 직후와
+  // authStateChanges(리디렉트로 돌아온 경우 포함)에서 동시에 불릴 수 있어 같은 회원은
+  // 진행 중인 작업을 함께 기다린다. 이메일 계정은 관리자가 만든 문서가 없으면 만들지 않음
+  Future<UserModel?>? _ensuring;
+  String? _ensuringUid;
+
+  Future<UserModel?> _ensureUserModel(User firebaseUser) {
+    if (_ensuringUid == firebaseUser.uid && _ensuring != null) return _ensuring!;
+    _ensuringUid = firebaseUser.uid;
+    return _ensuring = _createIfMissing(firebaseUser).whenComplete(() {
+      _ensuring = null;
+      _ensuringUid = null;
+    });
+  }
+
+  Future<UserModel?> _createIfMissing(User firebaseUser) async {
+    final existing = await _fetchUserModel(firebaseUser.uid);
+    if (existing != null) return existing;
+    if (!firebaseUser.providerData.any((p) => p.providerId == 'google.com')) return null;
+    // department를 비워두면 앱에서 소속 선택 온보딩 화면으로 안내됨
+    final userModel = UserModel(
+      uid: firebaseUser.uid,
+      name: firebaseUser.displayName ?? '이름 없음',
+      email: firebaseUser.email ?? '',
+      phone: '',
+      role: 'member',
+      department: '',
+      joinDate: DateTime.now(),
+    );
+    await _firestore.collection('users').doc(userModel.uid).set(userModel.toMap());
     return userModel;
   }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -11,6 +12,7 @@ import 'screens/home/home_screen.dart';
 import 'services/demo_data.dart';
 import 'services/firestore_service.dart' show demoMode;
 import 'services/push_service.dart';
+import 'utils/auth_domain.dart';
 import 'utils/theme.dart';
 import 'utils/web_update.dart';
 
@@ -21,7 +23,8 @@ void main() async {
     // 데모 모드: Firebase 초기화 없이 인메모리 데이터 사용
     DemoData.instance.init();
   } else {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    final options = DefaultFirebaseOptions.currentPlatform;
+    await Firebase.initializeApp(options: kIsWeb ? withHostAuthDomain(options, Uri.base.host) : options);
   }
 
   await initializeDateFormatting('ko', null);

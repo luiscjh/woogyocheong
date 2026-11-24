@@ -81,6 +81,12 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
       });
     } else {
+      // Google 로그인 화면에서 돌아왔는데 실패했으면 로그인 화면에 원인을 보여 줌
+      _authService.checkRedirectResult().catchError((Object e) {
+        _error = _parseAuthError(e.toString());
+        loginNotice = _error;
+        notifyListeners();
+      });
       _authService.authStateChanges.listen((firebaseUser) async {
         if (firebaseUser == null) {
           _currentUser = null;
@@ -101,6 +107,7 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> signIn(String email, String password) async {
     _status = AuthStatus.loading;
     _error = null;
+    loginNotice = null;
     notifyListeners();
     try {
       _currentUser = await _authService.signIn(email, password);
@@ -155,9 +162,12 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> signInWithGoogle() async {
     _status = AuthStatus.loading;
     _error = null;
+    loginNotice = null;
     notifyListeners();
     try {
       _currentUser = await _authService.signInWithGoogle();
+      // 현재 창이 Google 로그인 화면으로 넘어가는 중 — 실패가 아니므로 로딩 상태 유지
+      if (_currentUser == null && _authService.redirectStarted) return true;
       _status = _currentUser != null ? AuthStatus.authenticated : AuthStatus.unauthenticated;
       notifyListeners();
       _afterSignIn();
@@ -210,13 +220,35 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  // 로그인 화면이 한 번 보여 줄 안내(Google 로그인 화면에서 돌아왔을 때의 오류 등)
+  String? loginNotice;
+
   String _parseAuthError(String error) {
+    if (error.contains('inapp-browser')) {
+      return '카카오톡 같은 앱 안의 화면에서는 Google 로그인이 막혀 있어요. Chrome이나 Safari로 열어 주세요.';
+    }
+    if (error.contains('popup-closed-by-user') || error.contains('cancelled-popup-request') ||
+        error.contains('user-cancelled')) {
+      return 'Google 로그인 창이 닫혔어요. 다시 시도해 주세요.';
+    }
+    if (error.contains('popup-blocked')) return '팝업이 차단됐어요. 팝업을 허용한 뒤 다시 시도해 주세요.';
+    if (error.contains('unauthorized-domain')) {
+      return '이 주소에서는 로그인이 허용되지 않았어요. 관리자에게 알려 주세요. (unauthorized-domain)';
+    }
+    if (error.contains('web-storage-unsupported')) {
+      return '브라우저의 쿠키·저장공간이 막혀 있어요. 개인정보 보호(비공개) 모드를 끄고 다시 시도해 주세요.';
+    }
+    if (error.contains('user-disabled')) return '사용이 중지된 계정입니다. 관리자에게 문의해 주세요.';
+    if (error.contains('too-many-requests')) return '시도가 너무 많아요. 잠시 후 다시 시도해 주세요.';
+    if (error.contains('invalid-credential')) return '이메일 또는 비밀번호가 올바르지 않습니다.';
     if (error.contains('user-not-found')) return '등록되지 않은 이메일입니다.';
     if (error.contains('wrong-password')) return '비밀번호가 올바르지 않습니다.';
     if (error.contains('email-already-in-use')) return '이미 사용 중인 이메일입니다.';
     if (error.contains('weak-password')) return '비밀번호는 6자 이상이어야 합니다.';
     if (error.contains('invalid-email')) return '올바르지 않은 이메일 형식입니다.';
     if (error.contains('network-request-failed')) return '네트워크 연결을 확인해 주세요.';
-    return '오류가 발생했습니다. 다시 시도해 주세요.';
+    // 그 밖의 오류는 원인을 찾을 수 있게 코드를 함께 보여 줌(예: [firebase_auth/internal-error])
+    final code = RegExp(r'\[firebase_auth/([\w-]+)\]').firstMatch(error)?.group(1);
+    return code == null ? '오류가 발생했습니다. 다시 시도해 주세요.' : '오류가 발생했습니다. 다시 시도해 주세요. ($code)';
   }
 }

@@ -30,3 +30,15 @@ Future<bool> promptWebInstall() async => (await _install().toDart).toDart == 'ac
 
 // 앱 안의 브라우저에서 외부 브라우저로 다시 연다. 열 방법이 없으면 false
 bool openInExternalBrowser() => _openExternal().toDart;
+
+@JS('woogyocheongPreferRedirect')
+external JSBoolean _preferRedirect();
+
+@JS('woogyocheongIsInApp')
+external JSBoolean _isInApp();
+
+// Google 로그인을 팝업 대신 현재 창 이동으로 할지(휴대폰·설치한 앱)
+bool preferRedirectSignIn() => _preferRedirect().toDart;
+
+// 카카오톡 등 앱 안의 브라우저 — Google이 이 환경의 로그인을 막아 둠
+bool isInAppBrowser() => _isInApp().toDart;

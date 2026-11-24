@@ -171,6 +171,9 @@
         }).catch(function () {});
       }
       window.woogyocheongReload = function () { location.reload(); };
+      // Google 로그인 화면으로 넘어갔다가 뒤로 가기로 돌아오면 브라우저가 "로그인 중" 상태
+      // 그대로의 화면을 되살리므로(bfcache), 그때는 새로 불러온다
+      window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
       check();
       document.addEventListener('visibilitychange', function () {
         if (document.visibilityState === 'visible') check();
@@ -209,6 +212,13 @@
         if (isAndroid) return 'android';
         return 'manual';
       };
+      // Google 로그인을 팝업 대신 현재 창 이동(리디렉트)으로 할 환경 — 휴대폰과 설치한 앱은
+      // 팝업이 막히거나 결과를 못 돌려받는 경우가 많다(lib/services/auth_service.dart)
+      window.woogyocheongPreferRedirect = function () {
+        return isIos || isAndroid ||
+          window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      };
+      window.woogyocheongIsInApp = function () { return isInApp; };
       window.woogyocheongInstall = function () {
         if (!deferred) return Promise.resolve('unavailable');
         var e = deferred;
